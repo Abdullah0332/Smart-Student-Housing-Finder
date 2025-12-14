@@ -1,0 +1,33 @@
+# Geocoding cache
+geocode_cache.json
+
+# BVG API cache
+bvg_cache/
+
+# Temporary files
+temp_*.csv
+temp_*.xlsx
+temp_*.xls
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment
+.env
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
