@@ -5,9 +5,7 @@ import folium
 from folium import plugins
 import json
 from typing import Dict, Optional, Tuple
-from logger_config import setup_logger
-
-logger = setup_logger("area_visuals")
+from area_analysis import aggregate_housing_metrics, aggregate_transport_metrics
 
 DISTRICT_COORDS = {
     'Mitte': (52.5200, 13.4050),
@@ -23,7 +21,6 @@ DISTRICT_COORDS = {
     'Lichtenberg': (52.5130, 13.4990),
     'Reinickendorf': (52.5890, 13.3210)
 }
-
 
 def create_score_bar_chart(ranked_areas: pd.DataFrame, top_n: int = 10) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -68,7 +65,6 @@ def create_rooms_bar_chart(housing_metrics: pd.DataFrame) -> plt.Figure:
     
     plt.tight_layout()
     return fig
-
 
 def create_rent_vs_transport_scatter(ranked_areas: pd.DataFrame) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -195,13 +191,11 @@ def create_district_choropleth_map(ranked_areas: pd.DataFrame) -> folium.Map:
     
     return m
 
-
 def create_all_visualizations(analysis_results: Dict) -> Dict:
     ranked_areas = analysis_results['ranked_areas']
     housing_metrics = analysis_results['housing_metrics']
     
     if len(ranked_areas) == 0:
-        logger.warning("No data for visualizations")
         return {}
     
     visuals = {
@@ -213,7 +207,6 @@ def create_all_visualizations(analysis_results: Dict) -> Dict:
     }
     
     return visuals
-
 
 def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
     charts = {}

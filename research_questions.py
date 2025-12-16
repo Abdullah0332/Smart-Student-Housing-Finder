@@ -2,10 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from typing import Dict, Tuple, Optional
-from logger_config import setup_logger
 from area_analysis import analyze_best_areas, aggregate_housing_metrics, aggregate_transport_metrics
-
-logger = setup_logger("research_questions")
 
 RESEARCH_QUESTIONS = {
     "RQ1": {
@@ -39,7 +36,6 @@ RESEARCH_QUESTIONS = {
         "expected_result": "Gini coefficient > 0.3 indicates inequality"
     }
 }
-
 
 def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
     analysis_df = df[
@@ -103,7 +99,6 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
                          f"This relationship is {'statistically significant' if significant else 'not statistically significant'} (p={p_value:.4f})."
     }
 
-
 def analyze_rq2_district_balance(df: pd.DataFrame) -> Dict:
     
     try:
@@ -122,9 +117,7 @@ def analyze_rq2_district_balance(df: pd.DataFrame) -> Dict:
             'interpretation': f"Top 5 districts ranked by composite Student Area Score combining affordability, commute time, walking distance, and room availability."
         }
     except Exception as e:
-        logger.error(f"Error in RQ2 analysis: {e}")
         return {'status': 'error', 'message': str(e)}
-
 
 def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
     
@@ -179,9 +172,7 @@ def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
                              f"Slope: {slope:.2f} rooms per meter (negative = closer to transit = more rooms)."
         }
     except Exception as e:
-        logger.error(f"Error in RQ3 analysis: {e}")
         return {'status': 'error', 'message': str(e)}
-
 
 def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
     if 'provider' not in df.columns or 'total_commute_minutes' not in df.columns:
@@ -224,7 +215,6 @@ def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
                          f"differences in commute times across platforms (F={f_statistic:.3f}, p={p_value:.4f}). "
                          f"Compared {len(valid_platforms)} platforms."
     }
-
 
 def analyze_rq5_spatial_equity(df: pd.DataFrame) -> Dict:
     
@@ -273,13 +263,9 @@ def analyze_rq5_spatial_equity(df: pd.DataFrame) -> Dict:
                              f"Top 20% of districts contain {concentration_ratio*100:.1f}% of all rooms."
         }
     except Exception as e:
-        logger.error(f"Error in RQ5 analysis: {e}")
         return {'status': 'error', 'message': str(e)}
 
-
 def run_all_research_questions(df: pd.DataFrame) -> Dict:
-    logger.info("Running all research questions...")
-    
     results = {
         'RQ1_affordability_vs_accessibility': analyze_rq1_affordability_vs_accessibility(df),
         'RQ2_district_balance': analyze_rq2_district_balance(df),

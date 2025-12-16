@@ -2,9 +2,6 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 import json
-from logger_config import setup_logger
-
-logger = setup_logger("area_analysis")
 
 BERLIN_DISTRICTS = {
     'Mitte': {'lat': 52.5200, 'lon': 13.4050, 'bounds': {'north': 52.55, 'south': 52.49, 'east': 13.45, 'west': 13.35}},
@@ -21,7 +18,6 @@ BERLIN_DISTRICTS = {
     'Reinickendorf': {'lat': 52.5890, 'lon': 13.3210, 'bounds': {'north': 52.62, 'south': 52.55, 'east': 13.40, 'west': 13.25}}
 }
 
-
 def assign_apartment_to_district(lat: float, lon: float) -> Optional[str]:
     if pd.isna(lat) or pd.isna(lon):
         return None
@@ -33,7 +29,6 @@ def assign_apartment_to_district(lat: float, lon: float) -> Optional[str]:
             return district_name
     
     return None
-
 
 def aggregate_housing_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -48,7 +43,6 @@ def aggregate_housing_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df_with_districts = df[df['district'].notna()].copy()
     
     if len(df_with_districts) == 0:
-        logger.warning("No apartments could be assigned to districts")
         return pd.DataFrame()
     
     housing_metrics = []
@@ -72,7 +66,6 @@ def aggregate_housing_metrics(df: pd.DataFrame) -> pd.DataFrame:
         housing_metrics.append(metrics)
     
     return pd.DataFrame(housing_metrics)
-
 
 def aggregate_transport_metrics(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -132,7 +125,6 @@ def aggregate_transport_metrics(df: pd.DataFrame) -> pd.DataFrame:
         transport_metrics.append(metrics)
     
     return pd.DataFrame(transport_metrics)
-
 
 def calculate_student_area_score(
     housing_df: pd.DataFrame,
@@ -207,15 +199,11 @@ def calculate_student_area_score(
     
     return merged
 
-
 def analyze_best_areas(df: pd.DataFrame) -> Dict:
-    logger.info("Starting area analysis...")
-    
     housing_metrics = aggregate_housing_metrics(df)
     transport_metrics = aggregate_transport_metrics(df)
     
     if len(housing_metrics) == 0:
-        logger.warning("No housing metrics calculated")
         return {
             'housing_metrics': pd.DataFrame(),
             'transport_metrics': pd.DataFrame(),
@@ -227,7 +215,6 @@ def analyze_best_areas(df: pd.DataFrame) -> Dict:
     
     top_5_areas = ranked_areas.head(5)['district'].tolist() if len(ranked_areas) > 0 else []
     
-    logger.info(f"Area analysis complete. Found {len(ranked_areas)} districts with data")
     
     return {
         'housing_metrics': housing_metrics,

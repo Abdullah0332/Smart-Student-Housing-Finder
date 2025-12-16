@@ -3,9 +3,6 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 import os
 from math import radians, cos, sin, asin, sqrt
-from logger_config import setup_logger
-
-logger = setup_logger("gtfs_helper")
 
 GTFS_DIR = "GTFS"
 
@@ -23,7 +20,6 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * asin(sqrt(a))
     r = 6371000  # Radius of earth in meters
     return c * r
-
 
 def load_gtfs_stops() -> Optional[pd.DataFrame]:
     global _gtfs_stops_cache
@@ -47,12 +43,9 @@ def load_gtfs_stops() -> Optional[pd.DataFrame]:
         ].copy()
         
         _gtfs_stops_cache = stops[required_cols].copy()
-        logger.info(f"Loaded {len(_gtfs_stops_cache)} GTFS stops")
         return _gtfs_stops_cache
     except Exception as e:
-        logger.error(f"Error loading GTFS stops: {e}")
         return None
-
 
 def find_nearest_gtfs_stop(latitude: float, longitude: float, radius_m: int = 1000) -> Optional[Dict]:
     stops_df = load_gtfs_stops()
@@ -102,7 +95,6 @@ def find_nearest_gtfs_stop(latitude: float, longitude: float, radius_m: int = 10
         'id': str(nearest['stop_id'])
     }
 
-
 def load_gtfs_routes() -> Optional[pd.DataFrame]:
     global _gtfs_routes_cache
     if _gtfs_routes_cache is not None:
@@ -115,12 +107,9 @@ def load_gtfs_routes() -> Optional[pd.DataFrame]:
     try:
         routes = pd.read_csv(routes_file)
         _gtfs_routes_cache = routes.copy()
-        logger.info(f"Loaded {len(_gtfs_routes_cache)} GTFS routes")
         return _gtfs_routes_cache
     except Exception as e:
-        logger.error(f"Error loading GTFS routes: {e}")
         return None
-
 
 def detect_transport_mode(route_name: str, route_type: int) -> str:
     if pd.isna(route_name):
@@ -153,7 +142,6 @@ def detect_transport_mode(route_name: str, route_type: int) -> str:
     
     return 'bus'
 
-
 def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
     routes_df = load_gtfs_routes()
     if routes_df is None:
@@ -169,9 +157,7 @@ def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
                     nrows=500000,
                     usecols=['trip_id', 'stop_id', 'stop_sequence']
                 )
-                logger.info(f"Loaded {len(_gtfs_stop_times_sample)} stop_times sample")
             except Exception as e:
-                logger.error(f"Error loading stop_times: {e}")
                 return []
         else:
             return []
@@ -187,7 +173,6 @@ def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
         ]['trip_id'].unique()
     
     if len(trips_at_stop) == 0:
-        logger.debug(f"No trips found for stop_id: {stop_id}")
         return []
     
     global _gtfs_trips_cache
@@ -199,9 +184,7 @@ def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
                     trips_file,
                     usecols=['route_id', 'trip_id']
                 )
-                logger.info(f"Loaded {len(_gtfs_trips_cache)} GTFS trips")
             except Exception as e:
-                logger.error(f"Error loading trips: {e}")
                 return []
         else:
             return []
@@ -243,7 +226,6 @@ def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
                 break
     
     return route_info
-
 
 def find_route_between_stops(from_stop_id: str, to_stop_id: str) -> Optional[Dict]:
     routes_df = load_gtfs_routes()
@@ -327,7 +309,6 @@ def find_route_between_stops(from_stop_id: str, to_stop_id: str) -> Optional[Dic
         'route_type': route_type
     }
 
-
 def get_gtfs_commute_info(
     apartment_lat: float,
     apartment_lon: float,
@@ -375,7 +356,6 @@ def get_gtfs_commute_info(
         from_routes = get_routes_at_stop(from_stop['id'], max_routes=10)
         to_routes = get_routes_at_stop(to_stop['id'], max_routes=10)
         
-        logger.debug(f"Found {len(from_routes)} routes at from_stop, {len(to_routes)} routes at to_stop")
         
         if from_routes and to_routes:
             direct_route_found = False
@@ -482,8 +462,6 @@ def get_gtfs_commute_info(
                     modes = [to_route['mode']]
             else:
                 modes = ['public_transport']
-                logger.debug(f"No routes found at either stop")
-    
     stop_to_stop_distance = haversine_distance(
         from_stop['latitude'],
         from_stop['longitude'],
@@ -519,4 +497,3 @@ def get_gtfs_commute_info(
         'route_details': route_details
     }
     
-    logger.debug(f"Returning commute_info with {len(route_details)} route_details: {route_details}")

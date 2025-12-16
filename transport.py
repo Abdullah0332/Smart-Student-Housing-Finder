@@ -1,17 +1,12 @@
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 import json
-from logger_config import setup_logger
-
-logger = setup_logger("transport")
 
 try:
     from gtfs_helper import get_gtfs_commute_info, find_nearest_gtfs_stop
     GTFS_AVAILABLE = True
-    logger.info("GTFS helper loaded successfully")
 except ImportError as e:
     GTFS_AVAILABLE = False
-    logger.warning(f"GTFS helper not available: {e}")
 
 
 def get_commute_info(
@@ -21,7 +16,6 @@ def get_commute_info(
     university_lon: float
 ) -> Dict:
     if not GTFS_AVAILABLE:
-        logger.error("GTFS data not available")
         return {
             'error': 'GTFS data not available',
             'nearest_stop': None,
@@ -35,7 +29,6 @@ def get_commute_info(
     
     return get_gtfs_commute_info(apartment_lat, apartment_lon, university_lat, university_lon)
 
-
 def batch_get_commute_info(
     apartments_df,
     university_lat: float,
@@ -43,7 +36,6 @@ def batch_get_commute_info(
     delay: float = 0.0,
     progress_callback=None
 ) -> None:
-    logger.info(f"Calculating commute times for {len(apartments_df)} apartments...")
     
     apartments_df['nearest_stop_name'] = None
     apartments_df['nearest_stop_distance_m'] = None
@@ -89,14 +81,10 @@ def batch_get_commute_info(
             if commute_info.get('route_details'):
                 try:
                     apartments_df.at[idx, 'route_details'] = json.dumps(commute_info['route_details'])
-                    logger.debug(f"Stored route_details for apartment {idx}: {commute_info['route_details']}")
                 except Exception as e:
-                    logger.error(f"Error storing route_details: {e}")
                     apartments_df.at[idx, 'route_details'] = None
             else:
                 apartments_df.at[idx, 'route_details'] = None
-                logger.debug(f"No route_details for apartment {idx}")
-            
             if commute_info.get('journey'):
                 journey = commute_info['journey']
                 apartments_df.at[idx, 'transit_time_minutes'] = commute_info.get('transit_time_minutes', journey.get('duration_minutes', 0))
@@ -132,16 +120,13 @@ def batch_get_commute_info(
                 if commute_info.get('route_details'):
                     try:
                         apartments_df.at[idx, 'route_details'] = json.dumps(commute_info['route_details'])
-                        logger.debug(f"Stored route_details (no journey) for apartment {idx}: {commute_info['route_details']}")
                     except Exception as e:
-                        logger.error(f"Error storing route_details (no journey): {e}")
                         apartments_df.at[idx, 'route_details'] = None
                 else:
                     apartments_df.at[idx, 'route_details'] = None
                 
                 cached_count += 1
         else:
-            logger.warning(f"No stop found for apartment at ({row['latitude']:.6f}, {row['longitude']:.6f})")
             apartments_df.at[idx, 'nearest_stop_name'] = None
             apartments_df.at[idx, 'nearest_stop_distance_m'] = None
             apartments_df.at[idx, 'walking_time_minutes'] = None
@@ -160,4 +145,3 @@ def batch_get_commute_info(
             progress_callback(processed_count, len(apartments_df), cached_count, new_count)
         elif processed_count % 10 == 0:
             successful = apartments_df['total_commute_minutes'].notna().sum()
-            logger.debug(f"Processed {processed_count}/{len(apartments_df)} ({successful} successful)")

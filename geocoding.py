@@ -9,10 +9,6 @@ from typing import Tuple, Optional, Dict
 import geopy.geocoders
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
-from logger_config import setup_logger
-
-logger = setup_logger("geocoding")
-
 
 GEOCODE_CACHE_FILE = "geocode_cache.json"
 
@@ -27,21 +23,15 @@ def load_geocode_cache() -> Dict[str, Tuple[float, float]]:
                         try:
                             result[k] = (float(v[0]), float(v[1]))
                         except (ValueError, TypeError):
-                            logger.warning(f"Invalid cache entry for '{k}': {v}")
                             continue
                     elif isinstance(v, dict) and 'lat' in v and 'lon' in v:
                         try:
                             result[k] = (float(v['lat']), float(v['lon']))
                         except (ValueError, TypeError):
-                            logger.warning(f"Invalid cache entry for '{k}': {v}")
                             continue
-                logger.info(f"Loaded {len(result)} entries from geocode cache")
                 return result
         except Exception as e:
-            logger.error(f"Error loading geocode cache: {e}")
             return {}
-    else:
-        logger.info("Geocode cache file not found, starting with empty cache")
     return {}
 
 def save_geocode_cache(cache: Dict[str, Tuple[float, float]]):
@@ -49,10 +39,8 @@ def save_geocode_cache(cache: Dict[str, Tuple[float, float]]):
         cache_serializable = {k: list(v) for k, v in cache.items() if isinstance(v, (tuple, list)) and len(v) == 2}
         with open(GEOCODE_CACHE_FILE, 'w', encoding='utf-8') as f:
             json.dump(cache_serializable, f, indent=2, ensure_ascii=False)
-        logger.debug(f"Saved {len(cache_serializable)} entries to geocode cache")
     except Exception as e:
-        logger.error(f"Could not save geocode cache: {e}")
-        logger.error(traceback.format_exc())
+        pass
 
 _geocode_cache = None
 
@@ -88,7 +76,6 @@ def geocode_wunderflats(address: str, max_retries: int = 3, delay: float = 0.5, 
         if address_clean in cache:
             cached_value = cache[address_clean]
             if isinstance(cached_value, (list, tuple)) and len(cached_value) == 2:
-                logger.debug(f"Wunderflats cache HIT: '{address_clean}'")
                 return tuple(cached_value)
     
     street_postal_match = re.match(r'^([A-Za-zÄÖÜäöüß\s\-]+(?:straße|strasse|Straße|Strasse|weg|Weg|platz|Platz|allee|Allee|blick|Blick|steig|Steig|wall|Wall)),?\s*(\d{5}),?\s*$', address_clean, re.IGNORECASE)
@@ -109,7 +96,6 @@ def geocode_wunderflats(address: str, max_retries: int = 3, delay: float = 0.5, 
                 if var in cache:
                     cached_value = cache[var]
                     if isinstance(cached_value, (list, tuple)) and len(cached_value) == 2:
-                        logger.debug(f"Wunderflats cache HIT (variation): '{var}'")
                         cache[address_clean] = cached_value
                         save_geocode_cache(cache)
                         return tuple(cached_value)
@@ -126,15 +112,12 @@ def geocode_wunderflats(address: str, max_retries: int = 3, delay: float = 0.5, 
                         for var in address_variations:
                             cache[var] = coords
                         save_geocode_cache(cache)
-                    logger.info(f"Wunderflats geocoded (incomplete address): {address_clean[:50]}... → ({coords[0]:.6f}, {coords[1]:.6f}) using '{addr_var}'")
                     return coords
             except Exception as e:
-                logger.debug(f"Geocoding attempt failed for '{addr_var}': {e}")
                 continue
             time.sleep(delay)
     
     return _geocode_base(address_clean, max_retries, delay, use_cache, provider='Wunderflats')
-
 
 def geocode_neonwood(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True) -> Optional[Tuple[float, float]]:
     address_clean = str(address).strip()
@@ -165,7 +148,6 @@ def geocode_neonwood(address: str, max_retries: int = 3, delay: float = 0.5, use
                 if var in cache:
                     cached_value = cache[var]
                     if isinstance(cached_value, (list, tuple)) and len(cached_value) == 2:
-                        logger.debug(f"Neonwood cache HIT: '{var}'")
                         return tuple(cached_value)
         
         geolocator = Nominatim(user_agent="urban_technology_housing_finder")
@@ -181,14 +163,12 @@ def geocode_neonwood(address: str, max_retries: int = 3, delay: float = 0.5, use
                             cache[var] = coords
                         cache[address_clean] = coords
                         save_geocode_cache(cache)
-                    logger.info(f"Neonwood geocoded: {location_name_title} → ({coords[0]:.6f}, {coords[1]:.6f})")
                     return coords
             except Exception:
                 continue
             time.sleep(delay)
     
     return _geocode_base(address_clean, max_retries, delay, use_cache, provider='Neonwood')
-
 
 def geocode_zimmerei(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True) -> Optional[Tuple[float, float]]:
     address_clean = str(address).strip()
@@ -209,7 +189,6 @@ def geocode_zimmerei(address: str, max_retries: int = 3, delay: float = 0.5, use
     
     return _geocode_base(address_clean, max_retries, delay, use_cache, provider='Zimmerei')
 
-
 def geocode_urban_club(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True) -> Optional[Tuple[float, float]]:
     address_clean = str(address).strip()
     
@@ -228,7 +207,6 @@ def geocode_urban_club(address: str, max_retries: int = 3, delay: float = 0.5, u
     
     return _geocode_base(address_clean, max_retries, delay, use_cache, provider='The Urban Club')
 
-
 def geocode_havens_living(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True) -> Optional[Tuple[float, float]]:
     address_clean = str(address).strip()
     
@@ -238,7 +216,6 @@ def geocode_havens_living(address: str, max_retries: int = 3, delay: float = 0.5
         address_clean = address_clean.replace('Berlin', 'Berlin, Germany')
     
     return _geocode_base(address_clean, max_retries, delay, use_cache, provider='Havens Living')
-
 
 def geocode_66_monkeys(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True) -> Optional[Tuple[float, float]]:
     address_clean = str(address).strip()
@@ -250,10 +227,8 @@ def geocode_66_monkeys(address: str, max_retries: int = 3, delay: float = 0.5, u
     
     return _geocode_base(address_clean, max_retries, delay, use_cache, provider='66 Monkeys')
 
-
 def _geocode_base(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True, provider: str = 'Unknown') -> Optional[Tuple[float, float]]:
     return geocode_address(address, max_retries, delay, use_cache)
-
 
 def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_cache: bool = True) -> Optional[Tuple[float, float]]:
     address_clean = str(address).strip()
@@ -310,7 +285,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
                 address_clean = re.sub(r',?\s*\d{5},?', '', address_clean)
                 address_clean = re.sub(r'\s+', ' ', address_clean).strip()
                 address_clean = re.sub(r',\s*,+', ',', address_clean)  # Remove double commas
-                logger.debug(f"Removed non-Berlin postal code {postal_code} from address")
         except ValueError:
             pass
     
@@ -341,23 +315,18 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
                 
                 if is_berlin_postal and postal_code:
                     address_clean = f"{street_name}, {postal_code} Berlin, Germany"
-                    logger.debug(f"Fixed address: {street_name}, {postal_code} Berlin, Germany (removed {wrong_city})")
                 else:
                     address_clean = f"{street_name}, Berlin, Germany"
-                    logger.debug(f"Fixed address: {street_name}, Berlin, Germany (removed {wrong_city})")
             elif extracted_street_name:
                 street_name = extracted_street_name
                 if is_berlin_postal and postal_code:
                     address_clean = f"{street_name}, {postal_code} Berlin, Germany"
-                    logger.debug(f"Fixed address: {street_name}, {postal_code} Berlin, Germany (removed {wrong_city})")
                 else:
                     address_clean = f"{street_name}, Berlin, Germany"
-                    logger.debug(f"Fixed address: {street_name}, Berlin, Germany (removed {wrong_city})")
             else:
                 address_clean = re.sub(f'{wrong_city},?', '', address_clean, flags=re.IGNORECASE)
                 address_clean = re.sub(r'\s+', ' ', address_clean).strip()
                 address_clean = re.sub(r',\s*,+', ',', address_clean)  # Remove double commas
-                logger.debug(f"Removed {wrong_city} from address")
             break  # Only fix the first matching wrong city
     
     address_variations = []
@@ -531,7 +500,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
                         if address_clean != str(address).strip():
                             cache[str(address).strip()] = coords
                         save_geocode_cache(cache)
-                    logger.info(f"Geocoded: {address_clean[:50]}... → ({coords[0]:.6f}, {coords[1]:.6f}) [CACHED]")
                     return coords
                 
                 time.sleep(delay)  # Respect rate limits
@@ -578,7 +546,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
             if street_name_for_fallback and len(street_name_for_fallback) > 2:
                 street_name_for_fallback = re.sub(r'\s*0[,\.]\d+', '', street_name_for_fallback).strip()
                 fallback_address = f"{street_name_for_fallback}, {actual_city}, Germany"
-                logger.debug(f"Trying fallback geocoding to actual city: {fallback_address}")
                 try:
                     location = geolocator.geocode(fallback_address, timeout=10)
                     if location:
@@ -589,7 +556,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
                             cache[address_clean] = coords
                             cache[str(address).strip()] = coords
                             save_geocode_cache(cache)
-                        logger.info(f"Geocoded to actual city ({actual_city}): {address_clean[:50]}... → ({coords[0]:.6f}, {coords[1]:.6f})")
                         return coords
                 except Exception as e:
                     pass  # Fallback also failed
@@ -601,7 +567,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
             
             for city_fallback in city_fallback_variations:
                 if city_fallback:
-                    logger.debug(f"Trying fallback with city: {city_fallback}")
                     try:
                         location = geolocator.geocode(city_fallback, timeout=10)
                         if location:
@@ -612,7 +577,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
                                 cache[address_clean] = coords
                                 cache[str(address).strip()] = coords
                                 save_geocode_cache(cache)
-                            logger.info(f"Geocoded to city ({actual_city}): {address_clean[:50]}... → ({coords[0]:.6f}, {coords[1]:.6f})")
                             return coords
                     except Exception as e:
                         pass  # Fallback also failed
@@ -623,7 +587,6 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
             first_word = first_word_match.group(1)
             if len(first_word) > 3:  # Only if it's a meaningful word
                 final_attempt = f"{first_word}, Berlin, Germany"
-                logger.debug(f"Trying final fallback: {final_attempt}")
                 try:
                     location = geolocator.geocode(final_attempt, timeout=10)
                     if location:
@@ -634,14 +597,10 @@ def geocode_address(address: str, max_retries: int = 3, delay: float = 0.5, use_
                             cache[address_clean] = coords
                             cache[str(address).strip()] = coords
                             save_geocode_cache(cache)
-                        logger.info(f"Geocoded with fallback: {address_clean[:50]}... → ({coords[0]:.6f}, {coords[1]:.6f})")
                         return coords
                 except Exception as e:
                     pass  # Final attempt failed
-    
-    logger.warning(f"Failed to geocode: {address_clean[:50]}...")
     return None
-
 
 def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progress_callback=None) -> pd.DataFrame:
     if address_column not in df.columns:
@@ -658,7 +617,6 @@ def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progres
     cache = get_geocode_cache()
     cache_hits = 0
     new_geocodes = 0
-    logger.info(f"Starting geocoding with {len(cache)} cached entries")
     
     addresses_to_geocode = {}
     for idx, row in df.iterrows():
@@ -676,7 +634,6 @@ def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progres
         addresses_to_geocode[address_str].append(idx)
     
     total_unique = len(addresses_to_geocode)
-    logger.info(f"Geocoding {total_unique} unique addresses (out of {len(df)} total rows)...")
     
     processed = 0
     for address_str, indices in addresses_to_geocode.items():
@@ -781,7 +738,6 @@ def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progres
                     coords = tuple(cached_value)
                     cache_key = var
                     cache_hits += 1
-                    logger.debug(f"Cache HIT (exact): '{var}'")
                     break
         
         if not coords:
@@ -801,37 +757,28 @@ def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progres
                                 coords = tuple(cached_value)
                                 cache_key = key
                                 cache_hits += 1
-                                logger.debug(f"Cache HIT (partial): '{address_normalized}' -> '{key}'")
                                 break
         
         if not coords:
-            logger.debug(f"Cache MISS - geocoding ({provider_name}): '{address_normalized}'")
             try:
                 coords = geocode_func(address_str, delay=0.3, use_cache=True)
             except Exception as e:
-                logger.error(f"Error in {provider_name} geocoding: {e}")
                 coords = geocode_address(address_str, delay=0.3, use_cache=True)
             if coords:
                 new_geocodes += 1
-                logger.info(f"New geocode: '{address_normalized}' -> ({coords[0]:.6f}, {coords[1]:.6f})")
                 cache[address_normalized] = coords
                 for var in [f"{address_normalized}, Berlin, Germany", address_normalized.replace(', Germany', '')]:
                     if var not in cache:
                         cache[var] = coords
                 try:
                     save_geocode_cache(cache)
-                    logger.debug(f"Saved to cache: '{address_normalized}'")
                 except Exception as e:
-                    logger.error(f"Failed to save cache: {e}")
-            else:
-                logger.warning(f"Geocoding failed for: '{address_normalized}'")
+                    pass
         
         if coords:
             for idx in indices:
                 df.at[idx, 'latitude'] = float(coords[0])
                 df.at[idx, 'longitude'] = float(coords[1])
-        else:
-            logger.warning(f"Failed to geocode address: {address_str[:60]}...")
         
         processed += 1
         
@@ -839,22 +786,15 @@ def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progres
         if progress_callback:
             progress_callback(processed, total_unique, cache_hits, new_geocodes)
         elif processed % 10 == 0 or processed == total_unique:
-            logger.info(f"Progress: {processed}/{total_unique} addresses | {successful} successful ({cache_hits} cached, {new_geocodes} new)")
+            pass
         
         if processed % 50 == 0 and new_geocodes > 0:
             clear_geocode_cache()
             cache = get_geocode_cache()
-            logger.debug(f"Reloaded cache: now {len(cache)} entries")
     
     save_geocode_cache(cache)
     
     geocoded_count = df['latitude'].notna().sum()
-    logger.info(f"Successfully geocoded {geocoded_count}/{len(df)} addresses ({cache_hits} from cache, {new_geocodes} new)")
-    
-    logger.info(f"\n{'='*80}")
-    logger.info(f"ALL ROOMS WITH COORDINATES ({geocoded_count} total):")
-    logger.info(f"{'='*80}")
-    
     if geocoded_count > 0:
         if 'provider' in df.columns:
             df_sorted = df[df['latitude'].notna()].sort_values(['provider', 'address']).copy()
@@ -876,24 +816,12 @@ def geocode_dataframe(df: pd.DataFrame, address_column: str = 'address', progres
             else:
                 rent_str = "N/A"
             
-            logger.info(f"  [{idx:3d}] {provider:20s} | {address[:50]:50s} | Rent: {rent_str:>10s} | ({lat:.6f}, {lon:.6f})")
-    else:
-        logger.warning("  No rooms with coordinates found!")
-    
     missing_coords = df[df['latitude'].isna() | df['longitude'].isna()]
     if len(missing_coords) > 0:
-        logger.warning(f"\n{'='*80}")
-        logger.warning(f"ROOMS WITHOUT COORDINATES ({len(missing_coords)} total):")
-        logger.warning(f"{'='*80}")
         for idx, row in missing_coords.iterrows():
             provider = row.get('provider', 'N/A') if 'provider' in df.columns else 'N/A'
             address = row.get('address', 'N/A')
-            logger.warning(f"  [{idx:3d}] {provider:20s} | {address[:50]}")
-    
-    logger.info(f"{'='*80}\n")
-    
     return df
-
 
 def geocode_university(university_name_or_address: str) -> Optional[Tuple[float, float]]:
     if 'Berlin' not in university_name_or_address:
@@ -902,10 +830,6 @@ def geocode_university(university_name_or_address: str) -> Optional[Tuple[float,
         query = university_name_or_address
     
     coords = geocode_address(query)
-    
-    if coords:
-        logger.info(f"Geocoded university: {university_name_or_address}")
-        logger.info(f"  Coordinates: ({coords[0]:.6f}, {coords[1]:.6f})")
     
     return coords
 

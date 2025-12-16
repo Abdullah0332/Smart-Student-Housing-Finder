@@ -9,15 +9,12 @@ from transport import batch_get_commute_info
 from scoring import calculate_student_suitability_score
 from visualization import create_interactive_map, get_map_html
 from universities import get_university_list, get_university_info, get_university_coords
-from logger_config import setup_logger
 from area_analysis import analyze_best_areas
 from area_visuals import create_all_visualizations, create_research_question_charts
 from research_questions import run_all_research_questions, RESEARCH_QUESTIONS
 import matplotlib.pyplot as plt
 import json
 import traceback
-
-logger = setup_logger("app")
 
 st.set_page_config(
     page_title="Smart Student Housing Finder - Berlin",
@@ -133,7 +130,6 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = 1
 if 'selected_providers' not in st.session_state:
     st.session_state.selected_providers = []
-
 
 def main():
     config_col1, config_col2 = st.columns([1, 1])
@@ -675,7 +671,6 @@ def main():
                         route_details = route_details_value
                     
                     if route_details and len(route_details) > 0:
-                        logger.debug(f"Displaying route_details: {route_details}")
                         card_html += '<p style="margin: 8px 0 5px 0; font-size: 13px; color: ' + text_color + ';"><strong style="color: #8e44ad;">🚇 Routes:</strong></p>'
                         route_details_displayed = True
                         transport_section = True
@@ -723,8 +718,6 @@ def main():
                             
                             card_html += f'<p style="margin: 3px 0; padding: 6px; background: {mode_color}; color: white; border-radius: 4px; font-size: 12px; font-weight: bold; line-height: 1.4;">{route_text}</p>'
                 except Exception as e:
-                    logger.error(f"Error parsing route_details: {e}")
-                    logger.error(traceback.format_exc())
                     pass
             
             if not route_details_displayed and pd.notna(row.get('transport_modes')) and row['transport_modes']:
@@ -978,7 +971,8 @@ def main():
                                     rq_results = run_all_research_questions(st.session_state.processed_df)
                                     rq_charts = create_research_question_charts(rq_results, st.session_state.processed_df)
                                 except Exception as e:
-                                    logger.warning(f"Could not generate research question charts: {e}")
+                                    st.warning(f"Could not generate research question charts: {str(e)}")
+                                    rq_charts = {}
                                 
                                 col1, col2 = st.columns(2)
                                 
@@ -996,6 +990,7 @@ def main():
                                 
                                 if rq_charts:
                                     st.markdown("---")
+                                    st.subheader("📊 Research Questions Analysis")
                                     
                                     if 'rq1_scatter' in rq_charts or 'rq3_scatter' in rq_charts:
                                         rq_col1, rq_col2 = st.columns(2)
@@ -1023,8 +1018,6 @@ def main():
                                 
                             except Exception as e:
                                 st.error(f"Error creating visualizations: {str(e)}")
-                                logger.error(f"Visualization error: {e}", exc_info=True)
-                            
                             st.markdown("---")
                             st.subheader("💡 Key Insights")
                             
@@ -1045,7 +1038,6 @@ def main():
                                 if len(affordable_but_remote) > 0:
                                     st.info(f"**Affordable but Transport-Poor**: {', '.join(affordable_but_remote.head(3)['district'].tolist())}")
                             
-
 
 if __name__ == "__main__":
     main()
