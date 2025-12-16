@@ -326,3 +326,144 @@ def create_all_visualizations(analysis_results: Dict) -> Dict:
     
     return visuals
 
+
+def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
+    """
+    Create visualization charts for research questions.
+    
+    Parameters:
+    -----------
+    rq_results : dict
+        Results from run_all_research_questions()
+    df : pd.DataFrame
+        Original DataFrame for additional analysis
+    
+    Returns:
+    --------
+    dict
+        Dictionary with matplotlib figures for each research question
+    """
+    charts = {}
+    
+    # RQ1: Affordability vs Accessibility Scatter Plot
+    if rq_results.get('RQ1_affordability_vs_accessibility', {}).get('status') == 'success':
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        analysis_df = df[
+            df['rent'].notna() & 
+            df['total_commute_minutes'].notna() &
+            (pd.to_numeric(df['rent'], errors='coerce') > 0) &
+            (pd.to_numeric(df['total_commute_minutes'], errors='coerce') > 0)
+        ].copy()
+        
+        rents = pd.to_numeric(analysis_df['rent'], errors='coerce')
+        commutes = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
+        
+        ax.scatter(commutes, rents, alpha=0.5, s=50, c='steelblue', edgecolors='black', linewidth=0.5)
+        
+        # Add trend line
+        z = np.polyfit(commutes, rents, 1)
+        p = np.poly1d(z)
+        ax.plot(commutes, p(commutes), "r--", alpha=0.8, linewidth=2, label='Trend Line')
+        
+        result = rq_results['RQ1_affordability_vs_accessibility']
+        ax.set_xlabel('Commute Time (minutes)', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Rent (€/month)', fontsize=12, fontweight='bold')
+        ax.set_title(f'Rent vs Commute Time\n(r={result["correlation_coefficient"]:.3f}, p={result["p_value"]:.4f})', 
+                    fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        plt.tight_layout()
+        charts['rq1_scatter'] = fig
+    
+    # RQ3: Walking Distance vs Room Availability
+    if rq_results.get('RQ3_walking_vs_availability', {}).get('status') == 'success':
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        from area_analysis import aggregate_housing_metrics, aggregate_transport_metrics
+        housing_metrics = aggregate_housing_metrics(df)
+        transport_metrics = aggregate_transport_metrics(df)
+        merged = pd.merge(housing_metrics, transport_metrics, on='district', how='inner')
+        analysis_df = merged[
+            merged['avg_walking_distance_m'].notna() & 
+            merged['total_rooms'].notna() &
+            (merged['avg_walking_distance_m'] > 0)
+        ].copy()
+        
+        ax.scatter(analysis_df['avg_walking_distance_m'], analysis_df['total_rooms'], 
+                  alpha=0.7, s=100, c='coral', edgecolors='black', linewidth=1)
+        
+        # Add trend line
+        walking = analysis_df['avg_walking_distance_m'].values
+        rooms = analysis_df['total_rooms'].values
+        z = np.polyfit(walking, rooms, 1)
+        p = np.poly1d(z)
+        ax.plot(walking, p(walking), "r--", alpha=0.8, linewidth=2, label='Trend Line')
+        
+        result = rq_results['RQ3_walking_vs_availability']
+        ax.set_xlabel('Average Walking Distance to Stop (meters)', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Total Rooms Available', fontsize=12, fontweight='bold')
+        ax.set_title(f'Walking Distance vs Room Availability\n(R²={result["r_squared"]:.3f}, p={result["p_value"]:.4f})', 
+                    fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        plt.tight_layout()
+        charts['rq3_scatter'] = fig
+    
+    # RQ4: Platform Comparison Bar Chart
+    if rq_results.get('RQ4_platform_differences', {}).get('status') == 'success':
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        result = rq_results['RQ4_platform_differences']
+        platform_means = result.get('platform_means', {})
+        
+        if platform_means:
+            platforms = list(platform_means.keys())
+            means = [platform_means[p]['mean'] for p in platforms]
+            stds = [platform_means[p]['std'] for p in platforms]
+            
+            bars = ax.bar(platforms, means, yerr=stds, capsize=5, color='steelblue', alpha=0.7, edgecolor='black')
+            
+            ax.set_xlabel('Platform', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Average Commute Time (minutes)', fontsize=12, fontweight='bold')
+            ax.set_title(f'Platform Comparison - Commute Times\n(F={result["f_statistic"]:.3f}, p={result["p_value"]:.4f})', 
+                        fontsize=14, fontweight='bold')
+            ax.tick_params(axis='x', rotation=45)
+            ax.grid(True, alpha=0.3, axis='y')
+            
+            # Add value labels
+            for i, (bar, mean) in enumerate(zip(bars, means)):
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + stds[i] + 1,
+                       f'{mean:.1f}', ha='center', va='bottom', fontsize=9)
+            
+            plt.tight_layout()
+            charts['rq4_bar'] = fig
+    
+    # RQ5: Spatial Equity - Room Distribution
+    if rq_results.get('RQ5_spatial_equity', {}).get('status') == 'success':
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        from area_analysis import aggregate_housing_metrics
+        housing_metrics = aggregate_housing_metrics(df)
+        housing_metrics = housing_metrics.sort_values('total_rooms', ascending=True)
+        
+        bars = ax.barh(housing_metrics['district'], housing_metrics['total_rooms'], 
+                      color='skyblue', edgecolor='black', alpha=0.7)
+        
+        result = rq_results['RQ5_spatial_equity']
+        ax.set_xlabel('Number of Rooms', fontsize=12, fontweight='bold')
+        ax.set_ylabel('District', fontsize=12, fontweight='bold')
+        ax.set_title(f'Spatial Equity - Room Distribution\n(Gini={result["gini_coefficient"]:.3f}, {result["equity_level"]})', 
+                    fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3, axis='x')
+        
+        # Add value labels
+        for i, (idx, row) in enumerate(housing_metrics.iterrows()):
+            ax.text(row['total_rooms'] + max(housing_metrics['total_rooms']) * 0.01, i,
+                   f'{int(row["total_rooms"])}', va='center', fontsize=10)
+        
+        plt.tight_layout()
+        charts['rq5_bar'] = fig
+    
+    return charts
+

@@ -31,10 +31,8 @@ from visualization import create_interactive_map, get_map_html
 from universities import get_university_list, get_university_info, get_university_coords
 from logger_config import setup_logger
 from area_analysis import analyze_best_areas
-from area_visuals import create_all_visualizations
-import matplotlib.pyplot as plt
-from area_analysis import analyze_best_areas
-from area_visuals import create_all_visualizations
+from area_visuals import create_all_visualizations, create_research_question_charts
+from research_questions import run_all_research_questions, RESEARCH_QUESTIONS
 import matplotlib.pyplot as plt
 
 logger = setup_logger("app")
@@ -1060,19 +1058,41 @@ def main():
                         if len(ranked_areas) == 0:
                             st.error("No district data available. Make sure apartments have valid coordinates.")
                         else:
-                            # Top 5 Areas
+                            # Top 5 Areas - Visual Cards
                             st.subheader("🥇 Top 5 Best Areas for Students")
                             if top_5_areas:
-                                for i, district in enumerate(top_5_areas, 1):
+                                # Create 5 columns for top 5 cards
+                                top5_cols = st.columns(5)
+                                for i, (col, district) in enumerate(zip(top5_cols, top_5_areas)):
                                     district_data = ranked_areas[ranked_areas['district'] == district].iloc[0]
-                                    medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-                                    st.markdown(f"""
-                                    **{medal} {district}**
-                                    - Student Area Score: {district_data['student_area_score']:.3f}
-                                    - Total Rooms: {int(district_data.get('total_rooms', 0))}
-                                    - Avg Rent: €{district_data.get('avg_rent', 0):.0f}/month
-                                    - Avg Commute: {district_data.get('avg_commute_minutes', 0):.1f} min
-                                    """)
+                                    medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}."
+                                    
+                                    # Color based on rank
+                                    if i == 0:
+                                        bg_color = "#FFD700"  # Gold
+                                        border_color = "#FFA500"
+                                    elif i == 1:
+                                        bg_color = "#C0C0C0"  # Silver
+                                        border_color = "#808080"
+                                    elif i == 2:
+                                        bg_color = "#CD7F32"  # Bronze
+                                        border_color = "#8B4513"
+                                    else:
+                                        bg_color = "#E8F4F8"
+                                        border_color = "#3498db"
+                                    
+                                    with col:
+                                        st.markdown(f"""
+                                        <div style="background-color: {bg_color}; border: 3px solid {border_color}; 
+                                        border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 10px;">
+                                        <h3 style="margin: 5px 0; color: #262730;">{medal}</h3>
+                                        <h4 style="margin: 10px 0; color: #262730; font-weight: bold;">{district}</h4>
+                                        <p style="margin: 5px 0; font-size: 14px; color: #262730;"><strong>Score:</strong> {district_data['student_area_score']:.3f}</p>
+                                        <p style="margin: 5px 0; font-size: 12px; color: #555;">🏠 {int(district_data.get('total_rooms', 0))} rooms</p>
+                                        <p style="margin: 5px 0; font-size: 12px; color: #555;">💰 €{district_data.get('avg_rent', 0):.0f}/mo</p>
+                                        <p style="margin: 5px 0; font-size: 12px; color: #555;">🚇 {district_data.get('avg_commute_minutes', 0):.1f} min</p>
+                                        </div>
+                                        """, unsafe_allow_html=True)
                             
                             st.markdown("---")
                             
@@ -1102,18 +1122,58 @@ def main():
                             try:
                                 visuals = create_all_visualizations(analysis_results)
                                 
-                                # Charts
+                                # Run Research Questions Analysis for charts
+                                rq_results = {}
+                                rq_charts = {}
+                                try:
+                                    from research_questions import run_all_research_questions
+                                    from area_visuals import create_research_question_charts
+                                    rq_results = run_all_research_questions(st.session_state.processed_df)
+                                    rq_charts = create_research_question_charts(rq_results, st.session_state.processed_df)
+                                except Exception as e:
+                                    logger.warning(f"Could not generate research question charts: {e}")
+                                
+                                # Main Charts Row 1: Area Analysis
                                 col1, col2 = st.columns(2)
                                 
                                 with col1:
-                                    st.pyplot(visuals.get('score_chart', None))
-                                    st.pyplot(visuals.get('histogram', None))
+                                    if visuals.get('score_chart'):
+                                        st.pyplot(visuals['score_chart'])
+                                    if visuals.get('histogram'):
+                                        st.pyplot(visuals['histogram'])
                                 
                                 with col2:
-                                    st.pyplot(visuals.get('rooms_chart', None))
-                                    st.pyplot(visuals.get('scatter_plot', None))
+                                    if visuals.get('rooms_chart'):
+                                        st.pyplot(visuals['rooms_chart'])
+                                    if visuals.get('scatter_plot'):
+                                        st.pyplot(visuals['scatter_plot'])
+                                
+                                # Research Questions Charts
+                                if rq_charts:
+                                    st.markdown("---")
+                                    
+                                    # RQ1 and RQ3 (scatter plots)
+                                    if 'rq1_scatter' in rq_charts or 'rq3_scatter' in rq_charts:
+                                        rq_col1, rq_col2 = st.columns(2)
+                                        with rq_col1:
+                                            if 'rq1_scatter' in rq_charts:
+                                                st.pyplot(rq_charts['rq1_scatter'])
+                                        with rq_col2:
+                                            if 'rq3_scatter' in rq_charts:
+                                                st.pyplot(rq_charts['rq3_scatter'])
+                                    
+                                    # RQ4 and RQ5 (bar charts)
+                                    if 'rq4_bar' in rq_charts or 'rq5_bar' in rq_charts:
+                                        rq_col3, rq_col4 = st.columns(2)
+                                        with rq_col3:
+                                            if 'rq4_bar' in rq_charts:
+                                                st.pyplot(rq_charts['rq4_bar'])
+                                        with rq_col4:
+                                            if 'rq5_bar' in rq_charts:
+                                                st.pyplot(rq_charts['rq5_bar'])
                                 
                                 # Map
+                                st.markdown("---")
                                 st.subheader("🗺️ District Map (Colored by Student Area Score)")
                                 if 'map' in visuals and visuals['map'] is not None:
                                     map_html = get_map_html(visuals['map'])
@@ -1144,6 +1204,7 @@ def main():
                                 
                                 if len(affordable_but_remote) > 0:
                                     st.info(f"**Affordable but Transport-Poor**: {', '.join(affordable_but_remote.head(3)['district'].tolist())}")
+                            
 
 
 if __name__ == "__main__":

@@ -35,3 +35,11 @@ Thumbs.db
 logs/
 *.log
 
+# GTFS data files and directories
+GTFS/
+GTFS/**
+*.gtfs
+*.zip
+# GTFS text files (but allow README.txt)
+GTFS/*.txt
+!GTFS/README.txt
