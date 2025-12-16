@@ -1,15 +1,3 @@
-"""
-Area Visualization Module
-=========================
-
-Creates charts and maps for visualizing district-level analysis results.
-
-Urban Technology Relevance:
-- Spatial visualization is essential for understanding urban patterns
-- Choropleth maps show geographic distribution of accessibility
-- Charts enable comparison of districts across multiple dimensions
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +9,6 @@ from logger_config import setup_logger
 
 logger = setup_logger("area_visuals")
 
-# Berlin district center coordinates for map markers
 DISTRICT_COORDS = {
     'Mitte': (52.5200, 13.4050),
     'Friedrichshain-Kreuzberg': (52.5020, 13.4540),
@@ -39,21 +26,6 @@ DISTRICT_COORDS = {
 
 
 def create_score_bar_chart(ranked_areas: pd.DataFrame, top_n: int = 10) -> plt.Figure:
-    """
-    Create bar chart showing top N districts by Student Area Score.
-    
-    Parameters:
-    -----------
-    ranked_areas : pd.DataFrame
-        Districts ranked by student_area_score
-    top_n : int
-        Number of top districts to show
-    
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        Bar chart figure
-    """
     fig, ax = plt.subplots(figsize=(12, 6))
     
     top_districts = ranked_areas.head(top_n)
@@ -68,7 +40,6 @@ def create_score_bar_chart(ranked_areas: pd.DataFrame, top_n: int = 10) -> plt.F
     ax.set_title(f'Top {top_n} Berlin Districts by Student Area Score', fontsize=14, fontweight='bold')
     ax.set_xlim(0, 1)
     
-    # Add value labels on bars
     for i, (idx, row) in enumerate(top_districts.iterrows()):
         score = row['student_area_score']
         ax.text(score + 0.01, i, f'{score:.3f}', va='center', fontsize=10)
@@ -76,24 +47,9 @@ def create_score_bar_chart(ranked_areas: pd.DataFrame, top_n: int = 10) -> plt.F
     plt.tight_layout()
     return fig
 
-
 def create_rooms_bar_chart(housing_metrics: pd.DataFrame) -> plt.Figure:
-    """
-    Create bar chart showing number of rooms per district.
-    
-    Parameters:
-    -----------
-    housing_metrics : pd.DataFrame
-        Housing metrics per district
-    
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        Bar chart figure
-    """
     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Sort by number of rooms
     sorted_metrics = housing_metrics.sort_values('total_rooms', ascending=True)
     
     bars = ax.barh(
@@ -105,7 +61,6 @@ def create_rooms_bar_chart(housing_metrics: pd.DataFrame) -> plt.Figure:
     ax.set_xlabel('Number of Rooms', fontsize=12, fontweight='bold')
     ax.set_title('Room Availability by Berlin District', fontsize=14, fontweight='bold')
     
-    # Add value labels
     for i, (idx, row) in enumerate(sorted_metrics.iterrows()):
         rooms = row['total_rooms']
         ax.text(rooms + max(sorted_metrics['total_rooms']) * 0.01, i, 
@@ -116,22 +71,8 @@ def create_rooms_bar_chart(housing_metrics: pd.DataFrame) -> plt.Figure:
 
 
 def create_rent_vs_transport_scatter(ranked_areas: pd.DataFrame) -> plt.Figure:
-    """
-    Create scatter plot: Average rent vs transport accessibility.
-    
-    Parameters:
-    -----------
-    ranked_areas : pd.DataFrame
-        Merged data with rent and transport metrics
-    
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        Scatter plot figure
-    """
     fig, ax = plt.subplots(figsize=(10, 8))
     
-    # Filter to districts with both rent and commute data
     plot_data = ranked_areas[
         ranked_areas['avg_rent'].notna() & 
         ranked_areas['avg_commute_minutes'].notna()
@@ -153,7 +94,6 @@ def create_rent_vs_transport_scatter(ranked_areas: pd.DataFrame) -> plt.Figure:
         linewidth=1
     )
     
-    # Add district labels
     for idx, row in plot_data.iterrows():
         ax.annotate(
             row['district'],
@@ -167,28 +107,13 @@ def create_rent_vs_transport_scatter(ranked_areas: pd.DataFrame) -> plt.Figure:
     ax.set_title('Rent vs Transport Accessibility by District', fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3)
     
-    # Add colorbar
     cbar = plt.colorbar(scatter, ax=ax)
     cbar.set_label('Student Area Score', fontsize=10)
     
     plt.tight_layout()
     return fig
 
-
 def create_walking_distance_histogram(ranked_areas: pd.DataFrame) -> plt.Figure:
-    """
-    Create histogram of walking distances to nearest BVG stop.
-    
-    Parameters:
-    -----------
-    ranked_areas : pd.DataFrame
-        Data with avg_walking_distance_m
-    
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        Histogram figure
-    """
     fig, ax = plt.subplots(figsize=(10, 6))
     
     walking_data = ranked_areas['avg_walking_distance_m'].dropna()
@@ -207,36 +132,16 @@ def create_walking_distance_histogram(ranked_areas: pd.DataFrame) -> plt.Figure:
     plt.tight_layout()
     return fig
 
-
 def create_district_choropleth_map(ranked_areas: pd.DataFrame) -> folium.Map:
-    """
-    Create choropleth map of Berlin districts colored by Student Area Score.
-    
-    Note: This creates a simplified map using district center points.
-    For a true choropleth, you would need GeoJSON boundaries.
-    
-    Parameters:
-    -----------
-    ranked_areas : pd.DataFrame
-        Districts with student_area_score
-    
-    Returns:
-    --------
-    folium.Map
-        Interactive map
-    """
-    # Create base map centered on Berlin
     m = folium.Map(
         location=[52.5200, 13.4050],
         zoom_start=11,
         tiles='OpenStreetMap'
     )
     
-    # Color scale for scores
     max_score = ranked_areas['student_area_score'].max()
     min_score = ranked_areas['student_area_score'].min()
     
-    # Add markers for each district
     for idx, row in ranked_areas.iterrows():
         district = row['district']
         score = row['student_area_score']
@@ -244,18 +149,15 @@ def create_district_choropleth_map(ranked_areas: pd.DataFrame) -> folium.Map:
         if district in DISTRICT_COORDS:
             lat, lon = DISTRICT_COORDS[district]
             
-            # Color based on score (green = high, red = low)
             if max_score > min_score:
                 normalized_score = (score - min_score) / (max_score - min_score)
             else:
                 normalized_score = 0.5
             
-            # Interpolate color from red (low) to green (high)
             red = int(255 * (1 - normalized_score))
             green = int(255 * normalized_score)
             color = f'#{red:02x}{green:02x}00'
             
-            # Create popup with district info
             popup_html = f"""
             <div style="font-family: Arial; min-width: 200px;">
                 <h4 style="margin: 5px 0;">{district}</h4>
@@ -277,7 +179,6 @@ def create_district_choropleth_map(ranked_areas: pd.DataFrame) -> folium.Map:
                 fillOpacity=0.7
             ).add_to(m)
     
-    # Add legend
     legend_html = '''
     <div style="position: fixed; 
                 bottom: 50px; left: 50px; width: 200px; height: 120px; 
@@ -296,19 +197,6 @@ def create_district_choropleth_map(ranked_areas: pd.DataFrame) -> folium.Map:
 
 
 def create_all_visualizations(analysis_results: Dict) -> Dict:
-    """
-    Create all visualizations for area analysis.
-    
-    Parameters:
-    -----------
-    analysis_results : dict
-        Results from analyze_best_areas()
-    
-    Returns:
-    --------
-    dict
-        Dictionary with all figure objects and map
-    """
     ranked_areas = analysis_results['ranked_areas']
     housing_metrics = analysis_results['housing_metrics']
     
@@ -328,24 +216,8 @@ def create_all_visualizations(analysis_results: Dict) -> Dict:
 
 
 def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
-    """
-    Create visualization charts for research questions.
-    
-    Parameters:
-    -----------
-    rq_results : dict
-        Results from run_all_research_questions()
-    df : pd.DataFrame
-        Original DataFrame for additional analysis
-    
-    Returns:
-    --------
-    dict
-        Dictionary with matplotlib figures for each research question
-    """
     charts = {}
     
-    # RQ1: Affordability vs Accessibility Scatter Plot
     if rq_results.get('RQ1_affordability_vs_accessibility', {}).get('status') == 'success':
         fig, ax = plt.subplots(figsize=(10, 6))
         
@@ -361,7 +233,6 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
         
         ax.scatter(commutes, rents, alpha=0.5, s=50, c='steelblue', edgecolors='black', linewidth=0.5)
         
-        # Add trend line
         z = np.polyfit(commutes, rents, 1)
         p = np.poly1d(z)
         ax.plot(commutes, p(commutes), "r--", alpha=0.8, linewidth=2, label='Trend Line')
@@ -376,11 +247,9 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
         plt.tight_layout()
         charts['rq1_scatter'] = fig
     
-    # RQ3: Walking Distance vs Room Availability
     if rq_results.get('RQ3_walking_vs_availability', {}).get('status') == 'success':
         fig, ax = plt.subplots(figsize=(10, 6))
         
-        from area_analysis import aggregate_housing_metrics, aggregate_transport_metrics
         housing_metrics = aggregate_housing_metrics(df)
         transport_metrics = aggregate_transport_metrics(df)
         merged = pd.merge(housing_metrics, transport_metrics, on='district', how='inner')
@@ -393,7 +262,6 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
         ax.scatter(analysis_df['avg_walking_distance_m'], analysis_df['total_rooms'], 
                   alpha=0.7, s=100, c='coral', edgecolors='black', linewidth=1)
         
-        # Add trend line
         walking = analysis_df['avg_walking_distance_m'].values
         rooms = analysis_df['total_rooms'].values
         z = np.polyfit(walking, rooms, 1)
@@ -410,7 +278,6 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
         plt.tight_layout()
         charts['rq3_scatter'] = fig
     
-    # RQ4: Platform Comparison Bar Chart
     if rq_results.get('RQ4_platform_differences', {}).get('status') == 'success':
         fig, ax = plt.subplots(figsize=(12, 6))
         
@@ -431,7 +298,6 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
             ax.tick_params(axis='x', rotation=45)
             ax.grid(True, alpha=0.3, axis='y')
             
-            # Add value labels
             for i, (bar, mean) in enumerate(zip(bars, means)):
                 ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + stds[i] + 1,
                        f'{mean:.1f}', ha='center', va='bottom', fontsize=9)
@@ -439,11 +305,9 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
             plt.tight_layout()
             charts['rq4_bar'] = fig
     
-    # RQ5: Spatial Equity - Room Distribution
     if rq_results.get('RQ5_spatial_equity', {}).get('status') == 'success':
         fig, ax = plt.subplots(figsize=(12, 6))
         
-        from area_analysis import aggregate_housing_metrics
         housing_metrics = aggregate_housing_metrics(df)
         housing_metrics = housing_metrics.sort_values('total_rooms', ascending=True)
         
@@ -457,7 +321,6 @@ def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
                     fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='x')
         
-        # Add value labels
         for i, (idx, row) in enumerate(housing_metrics.iterrows()):
             ax.text(row['total_rooms'] + max(housing_metrics['total_rooms']) * 0.01, i,
                    f'{int(row["total_rooms"])}', va='center', fontsize=10)

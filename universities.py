@@ -1,18 +1,4 @@
-"""
-Berlin Universities Data
-========================
-
-Contains a comprehensive list of major public and private universities in Berlin
-with their addresses and coordinates for easy selection in the housing finder app.
-
-Urban Technology Relevance:
-- Understanding university locations helps analyze student housing demand patterns
-- Spatial distribution of educational institutions affects urban mobility patterns
-"""
-
-# Berlin Major Universities (Public and Private)
 BERLIN_UNIVERSITIES = {
-    # Public Universities
     "Technische Universität Berlin (TU Berlin)": {
         "name": "Technische Universität Berlin",
         "address": "Straße des 17. Juni 135, 10623 Berlin, Germany",
@@ -54,7 +40,6 @@ BERLIN_UNIVERSITIES = {
         "abbreviation": "Charité"
     },
     
-    # Private Universities
     "ESMT Berlin (European School of Management and Technology)": {
         "name": "ESMT Berlin",
         "address": "Schlossplatz 1, 10178 Berlin, Germany",
@@ -169,70 +154,20 @@ BERLIN_UNIVERSITIES = {
     }
 }
 
-
 def get_university_list():
-    """
-    Get list of universities formatted for dropdown display.
-    
-    Returns:
-    --------
-    list
-        List of university display names
-    """
     return list(BERLIN_UNIVERSITIES.keys())
 
 
 def get_university_info(university_name: str):
-    """
-    Get information for a specific university.
-    
-    Parameters:
-    -----------
-    university_name : str
-        Full name of the university (as in BERLIN_UNIVERSITIES keys)
-    
-    Returns:
-    --------
-    dict or None
-        University information including name, address, coordinates, type
-    """
     return BERLIN_UNIVERSITIES.get(university_name)
 
-
 def get_university_coords(university_name: str):
-    """
-    Get coordinates for a specific university.
-    
-    Parameters:
-    -----------
-    university_name : str
-        Full name of the university
-    
-    Returns:
-    --------
-    tuple or None
-        (latitude, longitude) if found
-    """
     info = get_university_info(university_name)
     if info:
         return (info['latitude'], info['longitude'])
     return None
 
-
 def get_universities_by_type(university_type: str = None):
-    """
-    Get universities filtered by type (Public or Private).
-    
-    Parameters:
-    -----------
-    university_type : str or None
-        'Public', 'Private', or None for all
-    
-    Returns:
-    --------
-    dict
-        Filtered dictionary of universities
-    """
     if university_type is None:
         return BERLIN_UNIVERSITIES
     

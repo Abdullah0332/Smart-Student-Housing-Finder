@@ -1,25 +1,12 @@
-"""
-Research Questions Module
-=========================
-
-Defines quantifiable research questions and provides statistical analysis functions
-to answer them using the housing and transport data.
-
-Urban Technology Relevance:
-- Demonstrates how to formulate testable hypotheses in urban analytics
-- Provides quantitative methods for spatial equity analysis
-- Shows statistical rigor in urban technology research
-"""
-
 import pandas as pd
 import numpy as np
 from scipy import stats
 from typing import Dict, Tuple, Optional
 from logger_config import setup_logger
+from area_analysis import analyze_best_areas, aggregate_housing_metrics, aggregate_transport_metrics
 
 logger = setup_logger("research_questions")
 
-# Research Questions Definitions
 RESEARCH_QUESTIONS = {
     "RQ1": {
         "question": "How does public transport accessibility affect housing affordability in Berlin?",
@@ -55,22 +42,6 @@ RESEARCH_QUESTIONS = {
 
 
 def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
-    """
-    RQ1: How does public transport accessibility affect housing affordability?
-    
-    Analyzes correlation between rent and commute time.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame with rent and total_commute_minutes columns
-    
-    Returns:
-    --------
-    dict
-        Analysis results with correlation coefficient, p-value, and interpretation
-    """
-    # Filter to rooms with both rent and commute data
     analysis_df = df[
         df['rent'].notna() & 
         df['total_commute_minutes'].notna() &
@@ -84,11 +55,9 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
             'message': 'Need at least 10 rooms with both rent and commute data'
         }
     
-    # Convert to numeric
     rents = pd.to_numeric(analysis_df['rent'], errors='coerce')
     commutes = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
     
-    # Remove outliers (beyond 3 standard deviations)
     rent_mean = rents.mean()
     rent_std = rents.std()
     commute_mean = commutes.mean()
@@ -106,10 +75,8 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
         rents_clean = rents
         commutes_clean = commutes
     
-    # Calculate Pearson correlation
     correlation, p_value = stats.pearsonr(rents_clean, commutes_clean)
     
-    # Interpretation
     if abs(correlation) < 0.1:
         strength = "negligible"
     elif abs(correlation) < 0.3:
@@ -138,22 +105,6 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
 
 
 def analyze_rq2_district_balance(df: pd.DataFrame) -> Dict:
-    """
-    RQ2: Which Berlin districts offer the best transport-housing balance?
-    
-    Uses district-level analysis from area_analysis module.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Complete DataFrame with district assignments
-    
-    Returns:
-    --------
-    dict
-        Top districts with scores
-    """
-    from area_analysis import analyze_best_areas
     
     try:
         results = analyze_best_areas(df)
@@ -176,23 +127,6 @@ def analyze_rq2_district_balance(df: pd.DataFrame) -> Dict:
 
 
 def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
-    """
-    RQ3: Relationship between walking distance to transit and room availability.
-    
-    Analyzes if areas closer to transit have more available rooms.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame with walking distance and room data
-    
-    Returns:
-    --------
-    dict
-        Regression analysis results
-    """
-    # Aggregate by district or area
-    from area_analysis import aggregate_housing_metrics, aggregate_transport_metrics
     
     try:
         housing_metrics = aggregate_housing_metrics(df)
@@ -203,7 +137,6 @@ def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
         
         merged = pd.merge(housing_metrics, transport_metrics, on='district', how='inner')
         
-        # Filter to districts with both metrics
         analysis_df = merged[
             merged['avg_walking_distance_m'].notna() & 
             merged['total_rooms'].notna() &
@@ -216,11 +149,9 @@ def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
         walking = analysis_df['avg_walking_distance_m'].values
         rooms = analysis_df['total_rooms'].values
         
-        # Linear regression
         slope, intercept, r_value, p_value, std_err = stats.linregress(walking, rooms)
         r_squared = r_value ** 2
         
-        # Interpretation
         if r_squared < 0.1:
             fit_quality = "poor"
         elif r_squared < 0.3:
@@ -253,25 +184,9 @@ def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
 
 
 def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
-    """
-    RQ4: How do different platforms vary in transport accessibility?
-    
-    Compares mean commute times across platforms using ANOVA.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame with provider and total_commute_minutes columns
-    
-    Returns:
-    --------
-    dict
-        ANOVA results and platform comparisons
-    """
     if 'provider' not in df.columns or 'total_commute_minutes' not in df.columns:
         return {'status': 'insufficient_data', 'message': 'Missing provider or commute data'}
     
-    # Filter to valid data
     analysis_df = df[
         df['provider'].notna() & 
         df['total_commute_minutes'].notna() &
@@ -280,7 +195,6 @@ def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
     
     analysis_df['commute'] = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
     
-    # Get platforms with at least 5 rooms
     platform_counts = analysis_df['provider'].value_counts()
     valid_platforms = platform_counts[platform_counts >= 5].index.tolist()
     
@@ -289,17 +203,13 @@ def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
     
     analysis_df = analysis_df[analysis_df['provider'].isin(valid_platforms)]
     
-    # Prepare data for ANOVA
     platform_groups = [analysis_df[analysis_df['provider'] == platform]['commute'].values 
                        for platform in valid_platforms]
     
-    # Perform ANOVA
     f_statistic, p_value = stats.f_oneway(*platform_groups)
     
-    # Calculate means per platform
     platform_means = analysis_df.groupby('provider')['commute'].agg(['mean', 'std', 'count']).to_dict('index')
     
-    # Interpretation
     significant = p_value < 0.05
     
     return {
@@ -317,22 +227,6 @@ def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
 
 
 def analyze_rq5_spatial_equity(df: pd.DataFrame) -> Dict:
-    """
-    RQ5: What is the spatial equity of student housing in Berlin?
-    
-    Calculates Gini coefficient for room distribution across districts.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        DataFrame with district assignments
-    
-    Returns:
-    --------
-    dict
-        Gini coefficient and equity analysis
-    """
-    from area_analysis import aggregate_housing_metrics
     
     try:
         housing_metrics = aggregate_housing_metrics(df)
@@ -340,22 +234,18 @@ def analyze_rq5_spatial_equity(df: pd.DataFrame) -> Dict:
         if len(housing_metrics) == 0:
             return {'status': 'insufficient_data', 'message': 'No district data available'}
         
-        # Calculate Gini coefficient for room distribution
         rooms = housing_metrics['total_rooms'].values
         rooms = rooms[rooms > 0]  # Remove zeros
         
         if len(rooms) < 2:
             return {'status': 'insufficient_data', 'message': 'Need at least 2 districts with rooms'}
         
-        # Sort rooms
         rooms_sorted = np.sort(rooms)
         n = len(rooms_sorted)
         
-        # Calculate Gini coefficient
         cumsum = np.cumsum(rooms_sorted)
         gini = (2 * np.sum((np.arange(1, n+1)) * rooms_sorted)) / (n * np.sum(rooms_sorted)) - (n + 1) / n
         
-        # Interpretation
         if gini < 0.2:
             equity_level = "highly equitable"
         elif gini < 0.3:
@@ -367,7 +257,6 @@ def analyze_rq5_spatial_equity(df: pd.DataFrame) -> Dict:
         else:
             equity_level = "highly unequal"
         
-        # Calculate concentration ratio (top 20% of districts)
         top_20_percent = int(np.ceil(n * 0.2))
         top_20_rooms = np.sum(rooms_sorted[-top_20_percent:])
         total_rooms = np.sum(rooms_sorted)
@@ -389,19 +278,6 @@ def analyze_rq5_spatial_equity(df: pd.DataFrame) -> Dict:
 
 
 def run_all_research_questions(df: pd.DataFrame) -> Dict:
-    """
-    Run all research questions and return comprehensive results.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Complete DataFrame with all analysis data
-    
-    Returns:
-    --------
-    dict
-        Results for all research questions
-    """
     logger.info("Running all research questions...")
     
     results = {
