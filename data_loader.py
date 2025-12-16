@@ -174,9 +174,24 @@ def load_accommodation_data(file_path, city_filter='Berlin', limit=None, provide
             
             # Ensure Berlin, Germany is at the end if not present
             # BUT: For apartment name patterns, keep the full name and let geocoding handle it
+            # Also: Remove non-Berlin cities from addresses (they cause geocoding issues)
+            non_berlin_cities = ['Hoppegarten', 'Potsdam', 'Hamburg', 'Munich', 'München', 'Frankfurt', 'Cologne', 'Köln', 'Neuenhagen', 'Teltow', 'Schönefeld', 'Ahrensfelde', 'Hennigsdorf', 'Glienicke', 'Nuthetal', 'Schöneiche', 'Stahnsdorf', 'Falkensee', 'Blankenfelde-Mahlow', 'Kleinmachnow', 'Schönwalde-Glien', 'Schulzendorf', 'Zeuthen', 'Bernau', 'Panketal', 'Fredersdorf', 'Großbeeren']
+            
             for idx in df.index:
                 addr = df.at[idx, 'address']
                 if pd.notna(addr) and addr != '' and addr != 'nan':
+                    # Remove "BER M mit Balkon" and "BER S mit Balkon" patterns (Wunderflats)
+                    addr = re.sub(r'BER\s+[MS]\s+mit\s+Balkon\s+', '', addr, flags=re.IGNORECASE)
+                    addr = re.sub(r'BER\s+[MS]\s+mit\s+Balkon', '', addr, flags=re.IGNORECASE)
+                    
+                    # Remove non-Berlin cities if present (they cause geocoding issues)
+                    for wrong_city in non_berlin_cities:
+                        if wrong_city in addr:
+                            # Remove the wrong city name
+                            addr = re.sub(f'{wrong_city},?', '', addr, flags=re.IGNORECASE)
+                            addr = re.sub(r'\s+', ' ', addr).strip()
+                            addr = re.sub(r',\s*,+', ',', addr)  # Remove double commas
+                    
                     # Check if it's an apartment name pattern (like "BERLIN MITTE-WEDDING Classic...")
                     is_apartment_name = re.match(r'^BERLIN\s+[A-ZÄÖÜ\s\-]+(?:Classic|Long|Term|Balcony|Silver|Neon)', addr, re.IGNORECASE)
                     
@@ -199,6 +214,9 @@ def load_accommodation_data(file_path, city_filter='Berlin', limit=None, provide
                                 df.at[idx, 'address'] = re.sub(r'(\d{5})\s*$', r'\1, Germany', addr)
                             else:
                                 df.at[idx, 'address'] = f"{addr}, Germany"
+                    
+                    # Update the cleaned address
+                    df.at[idx, 'address'] = addr
         
         # Filter by provider if specified (supports multiple providers separated by comma)
         if provider_filter and 'provider' in df.columns:
@@ -215,6 +233,7 @@ def load_accommodation_data(file_path, city_filter='Berlin', limit=None, provide
                     filter_mask = filter_mask | df['provider'].str.contains(provider.strip(), case=False, na=False)
                 df = df[filter_mask]
                 print(f"✓ Filtered to providers: {', '.join(provider_list)} ({len(df)} rooms)")
+            
         
         # Limit rows if specified (for preview/testing)
         if limit is not None and limit > 0:
