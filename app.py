@@ -20,19 +20,22 @@ Author: Urban Technology Course Project
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-import numpy as np
-import time
 from pathlib import Path
-import sys
 
 # Import custom modules
 from data_loader import load_accommodation_data, validate_data
 from geocoding import geocode_dataframe, geocode_university
 from transport import batch_get_commute_info
-from scoring import calculate_student_suitability_score, rank_apartments, compare_providers
-from visualization import create_interactive_map, save_map, get_map_html
-from universities import get_university_list, get_university_info, get_university_coords, get_universities_by_type
+from scoring import calculate_student_suitability_score
+from visualization import create_interactive_map, get_map_html
+from universities import get_university_list, get_university_info, get_university_coords
 from logger_config import setup_logger
+from area_analysis import analyze_best_areas
+from area_visuals import create_all_visualizations
+import matplotlib.pyplot as plt
+from area_analysis import analyze_best_areas
+from area_visuals import create_all_visualizations
+import matplotlib.pyplot as plt
 
 logger = setup_logger("app")
 
@@ -240,7 +243,6 @@ def main():
     # Provider configuration and data loading (runs in background, hidden from main UI)
     if file_exists:
         # Provider selection from code configuration
-        import pandas as pd
         all_providers_dynamic = []
         
         try:
@@ -781,8 +783,7 @@ def main():
             
             # Route Details - Show transport types and line names
             route_details_value = row.get('route_details')
-            route_details_displayed = False  # Track if we displayed route_details
-            # Debug: Check what we have
+            route_details_displayed = False
             if pd.notna(route_details_value) and route_details_value and str(route_details_value).strip() != '' and str(route_details_value).lower() != 'none':
                 try:
                     import json
@@ -849,11 +850,9 @@ def main():
                             
                             card_html += f'<p style="margin: 3px 0; padding: 6px; background: {mode_color}; color: white; border-radius: 4px; font-size: 12px; font-weight: bold; line-height: 1.4;">{route_text}</p>'
                 except Exception as e:
-                    # Log error for debugging
                     import traceback
                     logger.error(f"Error parsing route_details: {e}")
                     logger.error(traceback.format_exc())
-                    # Fallback to transport_modes if route_details parsing fails
                     pass
             
             # Transport Modes - format nicely (fallback if route_details not available or empty)
@@ -1023,6 +1022,128 @@ def main():
                         st.rerun()
                 
                 st.caption(f"Showing rooms {start_idx + 1}-{min(end_idx, total_rooms)} of {total_rooms} (Page {st.session_state.current_page}/{total_pages})")
+        
+        # Best Areas Analysis Button and Modal
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            show_area_analysis = st.button(
+                "🏆 Analyze Best Areas in Berlin",
+                type="secondary",
+                use_container_width=True,
+                help="View district-level analysis of transport accessibility and room availability"
+            )
+        
+        # Area Analysis Modal/Expander
+        if show_area_analysis:
+            with st.expander("🏆 Best Areas in Berlin Analysis", expanded=True):
+                st.header("📊 District-Level Analysis")
+                st.markdown("""
+                This analysis identifies the best areas (districts) in Berlin for students based on:
+                - **Transport Accessibility**: Commute time to university, walking distance to stops
+                - **Room Availability**: Number of available rooms and providers
+                - **Affordability**: Average rent per district
+                - **Composite Score**: Combined metric for overall student suitability
+                """)
+                
+                # Check if we have processed data
+                if 'processed_df' not in st.session_state or st.session_state.processed_df is None:
+                    st.warning("⚠️ Please run the full analysis first to see area rankings.")
+                else:
+                    with st.spinner("Analyzing districts..."):
+                        # Run area analysis
+                        analysis_results = analyze_best_areas(st.session_state.processed_df)
+                        
+                        ranked_areas = analysis_results['ranked_areas']
+                        top_5_areas = analysis_results['top_5_areas']
+                        
+                        if len(ranked_areas) == 0:
+                            st.error("No district data available. Make sure apartments have valid coordinates.")
+                        else:
+                            # Top 5 Areas
+                            st.subheader("🥇 Top 5 Best Areas for Students")
+                            if top_5_areas:
+                                for i, district in enumerate(top_5_areas, 1):
+                                    district_data = ranked_areas[ranked_areas['district'] == district].iloc[0]
+                                    medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                                    st.markdown(f"""
+                                    **{medal} {district}**
+                                    - Student Area Score: {district_data['student_area_score']:.3f}
+                                    - Total Rooms: {int(district_data.get('total_rooms', 0))}
+                                    - Avg Rent: €{district_data.get('avg_rent', 0):.0f}/month
+                                    - Avg Commute: {district_data.get('avg_commute_minutes', 0):.1f} min
+                                    """)
+                            
+                            st.markdown("---")
+                            
+                            # Rankings Table
+                            st.subheader("📋 Complete District Rankings")
+                            display_df = ranked_areas[[
+                                'district', 'student_area_score', 'total_rooms', 
+                                'avg_rent', 'avg_commute_minutes', 'avg_walking_distance_m'
+                            ]].copy()
+                            display_df.columns = [
+                                'District', 'Student Area Score', 'Total Rooms',
+                                'Avg Rent (€)', 'Avg Commute (min)', 'Avg Walking (m)'
+                            ]
+                            display_df = display_df.round({
+                                'Student Area Score': 3,
+                                'Avg Rent (€)': 0,
+                                'Avg Commute (min)': 1,
+                                'Avg Walking (m)': 0
+                            })
+                            st.dataframe(display_df, use_container_width=True, hide_index=True)
+                            
+                            st.markdown("---")
+                            
+                            # Visualizations
+                            st.subheader("📈 Visualizations")
+                            
+                            try:
+                                visuals = create_all_visualizations(analysis_results)
+                                
+                                # Charts
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.pyplot(visuals.get('score_chart', None))
+                                    st.pyplot(visuals.get('histogram', None))
+                                
+                                with col2:
+                                    st.pyplot(visuals.get('rooms_chart', None))
+                                    st.pyplot(visuals.get('scatter_plot', None))
+                                
+                                # Map
+                                st.subheader("🗺️ District Map (Colored by Student Area Score)")
+                                if 'map' in visuals and visuals['map'] is not None:
+                                    map_html = get_map_html(visuals['map'])
+                                    components.html(map_html, height=600, scrolling=False)
+                                
+                            except Exception as e:
+                                st.error(f"Error creating visualizations: {str(e)}")
+                                logger.error(f"Visualization error: {e}", exc_info=True)
+                            
+                            # Insights
+                            st.markdown("---")
+                            st.subheader("💡 Key Insights")
+                            
+                            # Find transport-rich but expensive
+                            if len(ranked_areas) > 0:
+                                expensive_but_accessible = ranked_areas[
+                                    (ranked_areas['avg_rent'] > ranked_areas['avg_rent'].median()) &
+                                    (ranked_areas['avg_commute_minutes'] < ranked_areas['avg_commute_minutes'].median())
+                                ]
+                                
+                                affordable_but_remote = ranked_areas[
+                                    (ranked_areas['avg_rent'] < ranked_areas['avg_rent'].median()) &
+                                    (ranked_areas['avg_commute_minutes'] > ranked_areas['avg_commute_minutes'].median())
+                                ]
+                                
+                                if len(expensive_but_accessible) > 0:
+                                    st.info(f"**Transport-Rich but Expensive**: {', '.join(expensive_but_accessible.head(3)['district'].tolist())}")
+                                
+                                if len(affordable_but_remote) > 0:
+                                    st.info(f"**Affordable but Transport-Poor**: {', '.join(affordable_but_remote.head(3)['district'].tolist())}")
 
 
 if __name__ == "__main__":

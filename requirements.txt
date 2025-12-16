@@ -31,6 +31,9 @@ folium>=0.14.0
 # Machine learning (for normalization/scaling)
 scikit-learn>=1.2.0
 
+# Data visualization
+matplotlib>=3.5.0
+
 # Optional: for better map visualization
 # leafmap>=0.25.0
 
