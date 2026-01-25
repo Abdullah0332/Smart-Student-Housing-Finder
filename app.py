@@ -2,19 +2,26 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 from pathlib import Path
-
-from data_loader import load_accommodation_data, validate_data
-from geocoding import geocode_dataframe, geocode_university
-from transport import batch_get_commute_info
-from scoring import calculate_student_suitability_score
-from visualization import create_interactive_map, get_map_html
-from universities import get_university_list, get_university_info, get_university_coords
-from area_analysis import analyze_best_areas
-from area_visuals import create_all_visualizations, create_research_question_charts
-from research_questions import run_all_research_questions, RESEARCH_QUESTIONS
-import matplotlib.pyplot as plt
 import json
 import traceback
+import matplotlib.pyplot as plt
+
+from src.data import load_accommodation_data, validate_data
+from src.data import get_university_list, get_university_info, get_university_coords
+from src.geo import geocode_dataframe, geocode_university
+from src.transport import batch_get_commute_info
+from src.analysis import calculate_student_suitability_score, analyze_best_areas
+from src.analysis import RESEARCH_QUESTIONS, run_all_research_questions
+from src.visualization import create_interactive_map, get_map_html
+from src.visualization import create_all_visualizations, create_research_question_charts
+
+from config.settings import (
+    DEFAULT_ACCOMMODATION_FILE,
+    DEFAULT_ENABLED_PROVIDERS,
+    SCORING_WEIGHTS,
+    UI,
+    TRANSPORT_MODES
+)
 
 st.set_page_config(
     page_title="Smart Student Housing Finder - Berlin",
@@ -25,60 +32,31 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Force light mode background */
-    .stApp {
-        background-color: #ffffff !important;
-    }
-    
-    /* Main content area */
+    .stApp { background-color: #ffffff !important; }
     .main .block-container {
         background-color: #ffffff !important;
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
-    
-    /* Headers */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
         color: #1f77b4;
         text-align: center;
         padding: 1rem 0;
-        background-color: #ffffff !important;
     }
     .sub-header {
         font-size: 1.2rem;
         color: #666;
         text-align: center;
         padding-bottom: 2rem;
-        background-color: #ffffff !important;
     }
-    
-    /* Metrics and info boxes */
     .stMetric {
         background-color: #f8f9fa !important;
         padding: 1rem;
         border-radius: 0.5rem;
         border: 1px solid #e0e0e0;
     }
-    
-    /* Info, success, warning boxes */
-    .stInfo, .stSuccess, .stWarning {
-        background-color: #f8f9fa !important;
-        border: 1px solid #e0e0e0 !important;
-    }
-    
-    /* Text colors for light mode */
-    .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6 {
-        color: #262730 !important;
-    }
-    
-    /* Input fields */
-    .stSelectbox, .stMultiselect, .stNumberInput, .stTextInput {
-        background-color: #ffffff !important;
-    }
-    
-    /* Buttons */
     .stButton > button {
         background-color: #1f77b4 !important;
         color: #ffffff !important;
@@ -87,8 +65,6 @@ st.markdown("""
     .stButton > button:hover {
         background-color: #1565a0 !important;
     }
-    
-    /* Room cards */
     .room-card-clickable {
         background-color: #ffffff !important;
         border: 1px solid #e0e0e0 !important;
@@ -96,205 +72,39 @@ st.markdown("""
     .room-card-clickable:hover {
         box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
         transform: translateY(-2px) !important;
-        background-color: #f8f9fa !important;
-    }
-    
-    /* Sidebar */
-    .css-1d391kg {
-        background-color: #f8f9fa !important;
-    }
-    
-    /* Tables */
-    .stDataFrame {
-        background-color: #ffffff !important;
-    }
-    
-    /* Ensure all backgrounds are light */
-    body {
-        background-color: #ffffff !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-if 'apartments_df' not in st.session_state:
-    st.session_state.apartments_df = None
-if 'university_coords' not in st.session_state:
-    st.session_state.university_coords = None
-if 'university_name' not in st.session_state:
-    st.session_state.university_name = None
-if 'processed_df' not in st.session_state:
-    st.session_state.processed_df = None
-if 'analysis_complete' not in st.session_state:
-    st.session_state.analysis_complete = False
-if 'current_page' not in st.session_state:
-    st.session_state.current_page = 1
-if 'selected_providers' not in st.session_state:
-    st.session_state.selected_providers = []
+
+def init_session_state():
+    defaults = {
+        'apartments_df': None,
+        'university_coords': None,
+        'university_name': None,
+        'processed_df': None,
+        'analysis_complete': False,
+        'current_page': 1,
+        'selected_providers': []
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+init_session_state()
+
 
 def main():
     config_col1, config_col2 = st.columns([1, 1])
     
     with config_col1:
         st.subheader("🎓 Select University")
-        
-        university_list = get_university_list()
-        
-        default_uni = "Technische Universität Berlin (TU Berlin)"
-        try:
-            default_idx = university_list.index(default_uni)
-        except ValueError:
-            default_idx = 0
-        
-        formatted_options = []
-        uni_mapping = {}  # Map formatted string to original university name
-        
-        for uni in university_list:
-            uni_info = get_university_info(uni)
-            type_label = "🏛️" if uni_info['type'] == 'Public' else "🏢"
-            formatted = f"{type_label} {uni} ({uni_info['type']})"
-            formatted_options.append(formatted)
-            uni_mapping[formatted] = uni
-        
-        selected_formatted = st.selectbox(
-            "Select your university",
-            options=formatted_options,
-            index=default_idx,
-            help="Choose from major Berlin universities (public and private)",
-            key="university_select"
-        )
-        
-        if selected_formatted:
-            selected_university = uni_mapping[selected_formatted]
-            uni_info = get_university_info(selected_university)
-            
-            if uni_info:
-                st.session_state.university_coords = (uni_info['latitude'], uni_info['longitude'])
-                st.session_state.university_name = uni_info['name']
+        render_university_selector()
     
     with config_col2:
         st.subheader("📁 Accommodation Data")
-        
-        default_file = "Accomodations.csv"
-        file_exists = Path(default_file).exists()
-        
-        if file_exists:
-            try:
-                df_temp = pd.read_csv(default_file, sep=';', encoding='latin-1')
-                if 'City' in df_temp.columns:
-                    berlin_df = df_temp[df_temp['City'].str.contains('Berlin', case=False, na=False)]
-                    total_records = len(berlin_df)
-                else:
-                    total_records = len(df_temp)
-            except:
-                total_records = 0
-            
-            st.markdown(f"""
-                <div style="background-color: #f8f9fa; padding: 3px 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center;">
-                    <h3 style="margin: 0; color: #262730;">Total Records: {total_records:,}</h3>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            use_default = True
-        else:
-            st.warning("No default file found.")
-            use_default = False
-            total_records = 0
-    
-    if file_exists:
-        all_providers_dynamic = []
-        
-        try:
-            if Path(default_file).exists():
-                df_temp = pd.read_csv(default_file, sep=';', encoding='latin-1')
-                if 'City' in df_temp.columns:
-                    berlin_df = df_temp[df_temp['City'].str.contains('Berlin', case=False, na=False)]
-                    if 'Provider' in berlin_df.columns:
-                        all_providers_dynamic = sorted(berlin_df['Provider'].dropna().unique().tolist())
-        except Exception as e:
-            all_providers_dynamic = ['66 Monkeys', 'Havens Living', 'House of CO', 'Neonwood', 
-                                    'The Urban Club', 'Wunderflats', 'Zimmerei', 'Mietcampus', 
-                                    'My i Live Home', 'The Fizz', 'Ernstl München']
-        
-        PROVIDERS_TO_ENABLE = ['66 Monkeys', 'Havens Living', 'House of CO', 'Neonwood', 
-                                'The Urban Club', 'Wunderflats', 'Zimmerei', 'Mietcampus', 
-                                'My i Live Home', 'The Fizz', 'Ernstl München']
-        
-        ENABLED_PROVIDERS = {}
-        for provider in all_providers_dynamic:
-            ENABLED_PROVIDERS[provider] = (provider in PROVIDERS_TO_ENABLE)
-        
-        selected_providers = [provider for provider, enabled in ENABLED_PROVIDERS.items() if enabled]
-        
-        if selected_providers:
-            provider_filter = ', '.join(selected_providers)
-        else:
-            provider_filter = None
-        
-        st.session_state.provider_filter = provider_filter
-        
-        current_filter = provider_filter if provider_filter else ""
-        last_filter = st.session_state.get('last_provider_filter', "")
-        
-        if current_filter != last_filter:
-            st.session_state.apartments_df = None
-            st.session_state.processed_df = None
-            st.session_state.analysis_complete = False
-            st.session_state.last_provider_filter = current_filter
-        
-        preview_mode = False  # No preview mode in simplified UI
-    else:
-        use_default = False
-        preview_mode = False
-        provider_filter = None
-    
-    if not use_default:
-        uploaded_file = st.file_uploader(
-            "Upload Excel or CSV file",
-            type=['csv', 'xlsx', 'xls'],
-            help="Upload your accommodation data file"
-        )
-    else:
-        uploaded_file = None
-    
-    if use_default and file_exists:
-        try:
-            should_reload = st.session_state.apartments_df is None
-            
-            if should_reload:
-                with st.spinner("Loading accommodation data..."):
-                    limit = 50 if preview_mode else None
-                    provider = st.session_state.get('provider_filter', None)
-                    if provider and provider.strip():
-                        provider = provider.strip()
-                    else:
-                        provider = None
-                    st.session_state.apartments_df = load_accommodation_data(default_file, limit=limit, provider_filter=provider)
-                    validate_data(st.session_state.apartments_df)
-                    mode_text = " (preview: 50 rooms)" if preview_mode else ""
-                    provider_text = f" from {provider}" if provider else ""
-                st.success(f"✓ Loaded {len(st.session_state.apartments_df)} accommodations{provider_text}{mode_text}")
-            else:
-                mode_text = " (preview mode)" if preview_mode and len(st.session_state.apartments_df) <= 50 else ""
-                st.success(f"✓ {len(st.session_state.apartments_df)} accommodations loaded{mode_text}")
-        except Exception as e:
-            st.error(f"Error loading file: {str(e)}")
-            st.session_state.apartments_df = None
-    
-    elif uploaded_file is not None:
-        try:
-            file_path = f"temp_{uploaded_file.name}"
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            st.session_state.apartments_df = load_accommodation_data(file_path, provider_filter=None)
-            validate_data(st.session_state.apartments_df)
-            
-            st.success(f"✓ Loaded {len(st.session_state.apartments_df)} accommodations")
-        
-        except Exception as e:
-            st.error(f"Error loading file: {str(e)}")
-            st.session_state.apartments_df = None
-    
+        render_data_loader()
     
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -315,730 +125,636 @@ def main():
         return
     
     if run_analysis:
-        df = st.session_state.apartments_df.copy()
-        
-        
-        if len(df) == 0:
-            st.error("No apartments found. Please check your data or reload.")
-            return
-        
-        st.header("Processing Data")
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        progress_details = st.empty()
-        
-        status_text.text("📍 Step 1/2: Geocoding Apartments")
-        progress_details.text("Initializing...")
-        
-        needs_geocoding = True
-        if 'latitude' in df.columns and 'longitude' in df.columns:
-            has_coords = df['latitude'].notna() & df['longitude'].notna()
-            needs_geocoding = not has_coords.all()  # Need geocoding if ANY are missing
-        
-        if needs_geocoding:
-            def update_geocoding_progress(current, total, cached, new):
-                progress = (current / total) * 0.5 if total > 0 else 0
-                progress_bar.progress(progress)
-                successful = cached + new
-                progress_details.text(f"📍 Step 1/2: Geocoding | Progress: {current}/{total} addresses | {successful} successful ({cached} cached, {new} new)")
-            
-            if 'latitude' not in df.columns:
-                df['latitude'] = None
-            if 'longitude' not in df.columns:
-                df['longitude'] = None
-            
-            df = geocode_dataframe(df, progress_callback=update_geocoding_progress)
-            
-            geocoded_count = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
-            total_count = len(df)
-            progress_bar.progress(0.5)
-            progress_details.text(f"✓ Step 1/2 Complete: {geocoded_count}/{total_count} rooms geocoded")
-        else:
-            progress_bar.progress(0.5)
-            geocoded_count = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
-            progress_details.text(f"✓ Step 1/2 Complete: Using existing coordinates ({geocoded_count} rooms)")
-        
-        status_text.text("🚇 Step 2/2: Calculating Commute Times & Distances")
-        progress_details.text("Using local GTFS data for fast, offline route planning...")
-        
-        total_apartments = len(df)
-        successful_count = 0
-        
-        def update_commute_progress(idx, total, cached, new):
-            nonlocal successful_count
-            successful_count = cached + new
-            progress = 0.5 + (idx / total) * 0.5 if total > 0 else 0.5
-            progress_bar.progress(progress)
-            progress_details.text(f"🚇 Step 2/2: Calculating Commute | Progress: {idx}/{total} apartments | {successful_count} successful")
-        
-        batch_get_commute_info(
-            df,
-            st.session_state.university_coords[0],
-            st.session_state.university_coords[1],
-            delay=0.0,  # No delay for local GTFS data
-            progress_callback=update_commute_progress
-        )
-        
-        progress_bar.progress(1.0)
-        progress_details.text(f"✓ Step 2/2 Complete: Processed {total_apartments} apartments using GTFS data")
-        
-        status_text.text("⭐ Calculating Scores...")
-        progress_details.text("Computing composite suitability scores...")
-        
-        coords_before_scoring = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
-        
-        df = calculate_student_suitability_score(
-            df,
-            rent_weight=0.35,
-            commute_weight=0.40,
-            walking_weight=0.15,
-            transfers_weight=0.10
-        )
-        
-        coords_after_scoring = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
-        
-        progress_bar.progress(1.0)
-        
-        if 'latitude' not in df.columns or 'longitude' not in df.columns:
-            st.error(f"⚠️ ERROR: Coordinates missing after processing! Columns: {list(df.columns)}")
-        else:
-            coords_in_final = df['latitude'].notna().sum()
-        
-        st.session_state.processed_df = df.copy()  # Use .copy() to ensure we have a fresh copy
-        st.session_state.analysis_complete = True
-        
-        if 'provider' in df.columns:
-            provider_counts = df['provider'].value_counts()
-            status_text.success(f"✓ Analysis complete! Processed {len(df)} rooms from {len(provider_counts)} providers: {', '.join(provider_counts.index.tolist())}")
-        else:
-            status_text.success("✓ Analysis complete!")
-        st.balloons()
-        
-        st.rerun()
+        run_full_analysis()
     
     if st.session_state.analysis_complete and st.session_state.processed_df is not None:
-        df = st.session_state.processed_df.copy()
+        render_results()
+
+
+def render_university_selector():
+    university_list = get_university_list()
+    
+    default_uni = "Technische Universität Berlin (TU Berlin)"
+    try:
+        default_idx = university_list.index(default_uni)
+    except ValueError:
+        default_idx = 0
+    
+    formatted_options = []
+    uni_mapping = {}
+    
+    for uni in university_list:
+        uni_info = get_university_info(uni)
+        type_label = "🏛️" if uni_info['type'] == 'Public' else "🏢"
+        formatted = f"{type_label} {uni} ({uni_info['type']})"
+        formatted_options.append(formatted)
+        uni_mapping[formatted] = uni
+    
+    selected_formatted = st.selectbox(
+        "Select your university",
+        options=formatted_options,
+        index=default_idx,
+        help="Choose from major Berlin universities (public and private)",
+        key="university_select"
+    )
+    
+    if selected_formatted:
+        selected_university = uni_mapping[selected_formatted]
+        uni_info = get_university_info(selected_university)
         
-        if len(df) == 0:
-            st.warning("No apartments found. Please check your data or reload.")
-            return
-        
-        if 'provider' in df.columns:
-            provider_breakdown = df['provider'].value_counts()
-            all_providers = sorted(provider_breakdown.index.tolist())
-        
-        if 'provider' in df.columns:
-            st.markdown("---")
-            st.subheader("🔍 Filter by Platform/Provider")
-            
-            if 'selected_providers' not in st.session_state or len(st.session_state.selected_providers) == 0:
-                st.session_state.selected_providers = all_providers  # Default: all providers selected
-            
-            valid_selected = [p for p in st.session_state.selected_providers if p in all_providers]
-            if len(valid_selected) != len(st.session_state.selected_providers):
-                st.session_state.selected_providers = valid_selected if len(valid_selected) > 0 else all_providers
-            
-            selected_providers = st.multiselect(
-                "Select platform(s) to display:",
-                options=all_providers,
-                default=st.session_state.selected_providers,
-                key="provider_filter_multiselect",
-                help="Select one or more platforms to filter the room list and map. Leave empty to show all."
-            )
-            
-            if set(selected_providers) != set(st.session_state.selected_providers):
-                st.session_state.selected_providers = selected_providers
-                st.session_state.current_page = 1  # Reset to page 1 when filter changes
-            
-            if len(selected_providers) > 0:
-                df = df[df['provider'].isin(selected_providers)].copy()
-                st.success(f"✓ Filtered to {len(df)} rooms from {len(selected_providers)} platform(s): {', '.join(selected_providers)}")
+        if uni_info:
+            st.session_state.university_coords = (uni_info['latitude'], uni_info['longitude'])
+            st.session_state.university_name = uni_info['name']
+
+
+def render_data_loader():
+    default_file = DEFAULT_ACCOMMODATION_FILE
+    file_exists = Path(default_file).exists()
+    
+    if file_exists:
+        try:
+            df_temp = pd.read_csv(default_file, sep=';', encoding='latin-1')
+            if 'City' in df_temp.columns:
+                berlin_df = df_temp[df_temp['City'].str.contains('Berlin', case=False, na=False)]
+                total_records = len(berlin_df)
             else:
-                st.info("ℹ️ No providers selected. Showing all rooms.")
+                total_records = len(df_temp)
+        except:
+            total_records = 0
         
-        st.markdown("---")
+        st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 3px 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center;">
+                <h3 style="margin: 0; color: #262730;">Total Records: {total_records:,}</h3>
+            </div>
+        """, unsafe_allow_html=True)
         
-        sort_option = st.selectbox(
-            "Sort by:",
-            ['Rent (Low to High)', 'Rent (High to Low)', 'Distance (Near to Far)', 'Distance (Far to Near)', 
-             'Commute Time (Short to Long)', 'Commute Time (Long to Short)'],
-            key="sort_option"
+        load_default_data(default_file)
+    else:
+        st.warning("No default file found.")
+        uploaded_file = st.file_uploader(
+            "Upload Excel or CSV file",
+            type=['csv', 'xlsx', 'xls'],
+            help="Upload your accommodation data file"
         )
-        
-        if sort_option == 'Rent (Low to High)':
-            df_sorted = df.sort_values('rent', ascending=True, na_position='last').copy()
-        elif sort_option == 'Rent (High to Low)':
-            df_sorted = df.sort_values('rent', ascending=False, na_position='last').copy()
-        elif sort_option == 'Distance (Near to Far)':
-            if 'nearest_stop_distance_m' in df.columns:
-                df_sorted = df.sort_values('nearest_stop_distance_m', ascending=True, na_position='last').copy()
+        if uploaded_file:
+            load_uploaded_data(uploaded_file)
+
+
+def load_default_data(file_path: str):
+    try:
+        df_temp = pd.read_csv(file_path, sep=';', encoding='latin-1')
+        if 'City' in df_temp.columns:
+            berlin_df = df_temp[df_temp['City'].str.contains('Berlin', case=False, na=False)]
+            if 'Provider' in berlin_df.columns:
+                all_providers = sorted(berlin_df['Provider'].dropna().unique().tolist())
             else:
-                df_sorted = df.copy()
-        elif sort_option == 'Distance (Far to Near)':
-            if 'nearest_stop_distance_m' in df.columns:
-                df_sorted = df.sort_values('nearest_stop_distance_m', ascending=False, na_position='last').copy()
-            else:
-                df_sorted = df.copy()
-        elif sort_option == 'Commute Time (Short to Long)':
-            if 'total_commute_minutes' in df.columns:
-                df_sorted = df.sort_values('total_commute_minutes', ascending=True, na_position='last').copy()
-            else:
-                df_sorted = df.copy()
-        elif sort_option == 'Commute Time (Long to Short)':
-            if 'total_commute_minutes' in df.columns:
-                df_sorted = df.sort_values('total_commute_minutes', ascending=False, na_position='last').copy()
-            else:
-                df_sorted = df.copy()
+                all_providers = DEFAULT_ENABLED_PROVIDERS
         else:
-            df_sorted = df.copy()
-        
-        ROOMS_PER_PAGE = 50
-        total_rooms = len(df_sorted)
-        total_pages = max(1, (total_rooms + ROOMS_PER_PAGE - 1) // ROOMS_PER_PAGE)  # Ceiling division
-        
-        if st.session_state.current_page > total_pages:
-            st.session_state.current_page = 1
-        
-        start_idx = (st.session_state.current_page - 1) * ROOMS_PER_PAGE
-        end_idx = start_idx + ROOMS_PER_PAGE
-        df_paginated = df_sorted.iloc[start_idx:end_idx].copy()
-        
-        st.subheader("🗺️ Map View")
-        
-        if 'latitude' not in df.columns or 'longitude' not in df.columns:
-            st.error(f"⚠️ Missing coordinate columns! Available columns: {list(df.columns)}")
-            st.warning("⚠️ No rooms with valid coordinates for map display.")
-        else:
-            df_paginated_for_map = df_paginated.copy()
+            all_providers = DEFAULT_ENABLED_PROVIDERS
+    except:
+        all_providers = DEFAULT_ENABLED_PROVIDERS
+    
+    selected_providers = [p for p in all_providers if p in DEFAULT_ENABLED_PROVIDERS]
+    provider_filter = ', '.join(selected_providers) if selected_providers else None
+    
+    st.session_state.provider_filter = provider_filter
+    
+    current_filter = provider_filter or ""
+    last_filter = st.session_state.get('last_provider_filter', "")
+    
+    if current_filter != last_filter:
+        st.session_state.apartments_df = None
+        st.session_state.processed_df = None
+        st.session_state.analysis_complete = False
+        st.session_state.last_provider_filter = current_filter
+    
+    if st.session_state.apartments_df is None:
+        with st.spinner("Loading accommodation data..."):
+            provider = st.session_state.get('provider_filter', None)
+            if provider and provider.strip():
+                provider = provider.strip()
+            else:
+                provider = None
             
-            if 'latitude' in df_paginated_for_map.columns and 'longitude' in df_paginated_for_map.columns:
-                df_paginated_for_map['latitude'] = pd.to_numeric(df_paginated_for_map['latitude'], errors='coerce')
-                df_paginated_for_map['longitude'] = pd.to_numeric(df_paginated_for_map['longitude'], errors='coerce')
+            st.session_state.apartments_df = load_accommodation_data(
+                file_path, 
+                limit=None, 
+                provider_filter=provider
+            )
+            validate_data(st.session_state.apartments_df)
+        
+        provider_text = f" from selected providers" if provider else ""
+        st.success(f"✓ Loaded {len(st.session_state.apartments_df)} accommodations{provider_text}")
+    else:
+        st.success(f"✓ {len(st.session_state.apartments_df)} accommodations loaded")
+
+
+def load_uploaded_data(uploaded_file):
+    try:
+        file_path = f"temp_{uploaded_file.name}"
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        st.session_state.apartments_df = load_accommodation_data(file_path, provider_filter=None)
+        validate_data(st.session_state.apartments_df)
+        
+        st.success(f"✓ Loaded {len(st.session_state.apartments_df)} accommodations")
+    except Exception as e:
+        st.error(f"Error loading file: {str(e)}")
+        st.session_state.apartments_df = None
+
+
+def run_full_analysis():
+    df = st.session_state.apartments_df.copy()
+    
+    if len(df) == 0:
+        st.error("No apartments found. Please check your data or reload.")
+        return
+    
+    st.header("Processing Data")
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    progress_details = st.empty()
+    
+    status_text.text("📍 Step 1/2: Geocoding Apartments")
+    progress_details.text("Initializing...")
+    
+    needs_geocoding = True
+    if 'latitude' in df.columns and 'longitude' in df.columns:
+        has_coords = df['latitude'].notna() & df['longitude'].notna()
+        needs_geocoding = not has_coords.all()
+    
+    if needs_geocoding:
+        def update_geocoding_progress(current, total, cached, new):
+            progress = (current / total) * 0.5 if total > 0 else 0
+            progress_bar.progress(progress)
+            successful = cached + new
+            progress_details.text(f"📍 Step 1/2: Geocoding | Progress: {current}/{total} addresses | {successful} successful ({cached} cached, {new} new)")
+        
+        if 'latitude' not in df.columns:
+            df['latitude'] = None
+        if 'longitude' not in df.columns:
+            df['longitude'] = None
+        
+        df = geocode_dataframe(df, progress_callback=update_geocoding_progress)
+        
+        geocoded_count = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
+        progress_bar.progress(0.5)
+        progress_details.text(f"✓ Step 1/2 Complete: {geocoded_count}/{len(df)} rooms geocoded")
+    else:
+        progress_bar.progress(0.5)
+        geocoded_count = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
+        progress_details.text(f"✓ Step 1/2 Complete: Using existing coordinates ({geocoded_count} rooms)")
+    
+    status_text.text("🚇 Step 2/2: Calculating Commute Times & Distances")
+    progress_details.text("Using local GTFS data for fast, offline route planning...")
+    
+    successful_count = 0
+    
+    def update_commute_progress(idx, total, cached, new):
+        nonlocal successful_count
+        successful_count = cached + new
+        progress = 0.5 + (idx / total) * 0.5 if total > 0 else 0.5
+        progress_bar.progress(progress)
+        progress_details.text(f"🚇 Step 2/2: Calculating Commute | Progress: {idx}/{total} apartments | {successful_count} successful")
+    
+    batch_get_commute_info(
+        df,
+        st.session_state.university_coords[0],
+        st.session_state.university_coords[1],
+        delay=0.0,
+        progress_callback=update_commute_progress
+    )
+    
+    progress_bar.progress(1.0)
+    progress_details.text(f"✓ Step 2/2 Complete: Processed {len(df)} apartments using GTFS data")
+    
+    status_text.text("⭐ Calculating Scores...")
+    progress_details.text("Computing composite suitability scores...")
+    
+    df = calculate_student_suitability_score(
+        df,
+        rent_weight=SCORING_WEIGHTS['rent'],
+        commute_weight=SCORING_WEIGHTS['commute'],
+        walking_weight=SCORING_WEIGHTS['walking'],
+        transfers_weight=SCORING_WEIGHTS['transfers']
+    )
+    
+    progress_bar.progress(1.0)
+    
+    st.session_state.processed_df = df.copy()
+    st.session_state.analysis_complete = True
+    
+    if 'provider' in df.columns:
+        provider_counts = df['provider'].value_counts()
+        status_text.success(f"✓ Analysis complete! Processed {len(df)} rooms from {len(provider_counts)} providers")
+    else:
+        status_text.success("✓ Analysis complete!")
+    
+    st.balloons()
+    st.rerun()
+
+
+def render_results():
+    df = st.session_state.processed_df.copy()
+    
+    if len(df) == 0:
+        st.warning("No apartments found. Please check your data or reload.")
+        return
+    
+    if 'provider' in df.columns:
+        df = render_provider_filter(df)
+    
+    st.markdown("---")
+    df_sorted = render_sorting(df)
+    
+    df_paginated, start_idx, end_idx, total_pages = paginate_data(df_sorted)
+    
+    st.subheader("🗺️ Map View")
+    render_map(df_paginated)
+    
+    st.markdown("---")
+    st.subheader("🏠 Rooms List")
+    render_room_cards(df_paginated)
+    
+    if len(df_sorted) > UI['rooms_per_page']:
+        render_pagination(start_idx, end_idx, total_pages, len(df_sorted))
+    
+    st.markdown("---")
+    render_area_analysis_button()
+
+
+def render_provider_filter(df: pd.DataFrame) -> pd.DataFrame:
+    provider_breakdown = df['provider'].value_counts()
+    all_providers = sorted(provider_breakdown.index.tolist())
+    
+    st.markdown("---")
+    st.subheader("🔍 Filter by Platform/Provider")
+    
+    if 'selected_providers' not in st.session_state or len(st.session_state.selected_providers) == 0:
+        st.session_state.selected_providers = all_providers
+    
+    valid_selected = [p for p in st.session_state.selected_providers if p in all_providers]
+    if len(valid_selected) != len(st.session_state.selected_providers):
+        st.session_state.selected_providers = valid_selected if len(valid_selected) > 0 else all_providers
+    
+    selected_providers = st.multiselect(
+        "Select platform(s) to display:",
+        options=all_providers,
+        default=st.session_state.selected_providers,
+        key="provider_filter_multiselect",
+        help="Select one or more platforms to filter the room list and map."
+    )
+    
+    if set(selected_providers) != set(st.session_state.selected_providers):
+        st.session_state.selected_providers = selected_providers
+        st.session_state.current_page = 1
+    
+    if len(selected_providers) > 0:
+        df = df[df['provider'].isin(selected_providers)].copy()
+        st.success(f"✓ Filtered to {len(df)} rooms from {len(selected_providers)} platform(s)")
+    else:
+        st.info("ℹ️ No providers selected. Showing all rooms.")
+    
+    return df
+
+
+def render_sorting(df: pd.DataFrame) -> pd.DataFrame:
+    sort_option = st.selectbox(
+        "Sort by:",
+        ['Rent (Low to High)', 'Rent (High to Low)', 'Distance (Near to Far)', 
+         'Distance (Far to Near)', 'Commute Time (Short to Long)', 'Commute Time (Long to Short)'],
+        key="sort_option"
+    )
+    
+    sort_configs = {
+        'Rent (Low to High)': ('rent', True),
+        'Rent (High to Low)': ('rent', False),
+        'Distance (Near to Far)': ('nearest_stop_distance_m', True),
+        'Distance (Far to Near)': ('nearest_stop_distance_m', False),
+        'Commute Time (Short to Long)': ('total_commute_minutes', True),
+        'Commute Time (Long to Short)': ('total_commute_minutes', False)
+    }
+    
+    sort_col, ascending = sort_configs.get(sort_option, ('rent', True))
+    
+    if sort_col in df.columns:
+        return df.sort_values(sort_col, ascending=ascending, na_position='last').copy()
+    return df.copy()
+
+
+def paginate_data(df: pd.DataFrame):
+    rooms_per_page = UI['rooms_per_page']
+    total_rooms = len(df)
+    total_pages = max(1, (total_rooms + rooms_per_page - 1) // rooms_per_page)
+    
+    if st.session_state.current_page > total_pages:
+        st.session_state.current_page = 1
+    
+    start_idx = (st.session_state.current_page - 1) * rooms_per_page
+    end_idx = start_idx + rooms_per_page
+    df_paginated = df.iloc[start_idx:end_idx].copy()
+    
+    return df_paginated, start_idx, end_idx, total_pages
+
+
+def render_map(df: pd.DataFrame):
+    if 'latitude' not in df.columns or 'longitude' not in df.columns:
+        st.error("⚠️ Missing coordinate columns!")
+        return
+    
+    df_for_map = df.copy()
+    df_for_map['latitude'] = pd.to_numeric(df_for_map['latitude'], errors='coerce')
+    df_for_map['longitude'] = pd.to_numeric(df_for_map['longitude'], errors='coerce')
+    
+    valid_coords_mask = (
+        df_for_map['latitude'].notna() &
+        df_for_map['longitude'].notna() &
+        (df_for_map['latitude'] != 0) &
+        (df_for_map['longitude'] != 0) &
+        (df_for_map['latitude'] >= -90) &
+        (df_for_map['latitude'] <= 90) &
+        (df_for_map['longitude'] >= -180) &
+        (df_for_map['longitude'] <= 180)
+    )
+    
+    df_for_map = df_for_map[valid_coords_mask].copy()
+    
+    if len(df_for_map) > 0:
+        try:
+            map_color_by = 'suitability_score' if 'suitability_score' in df_for_map.columns else 'rent'
             
-            valid_coords_mask = (
-                df_paginated_for_map['latitude'].notna() & 
-                df_paginated_for_map['longitude'].notna() &
-                (df_paginated_for_map['latitude'] != 0) &
-                (df_paginated_for_map['longitude'] != 0) &
-                (df_paginated_for_map['latitude'] >= -90) &
-                (df_paginated_for_map['latitude'] <= 90) &
-                (df_paginated_for_map['longitude'] >= -180) &
-                (df_paginated_for_map['longitude'] <= 180)
+            m = create_interactive_map(
+                df_for_map,
+                st.session_state.university_coords,
+                st.session_state.university_name,
+                color_by=map_color_by
             )
             
-            df_for_map = df_paginated_for_map[valid_coords_mask].copy()
+            map_html = get_map_html(m)
+            components.html(map_html, height=600, scrolling=True)
             
-            if len(df_for_map) > 0:
+            st.caption(f"📍 Showing {len(df_for_map)} rooms with valid coordinates + 1 university on map")
+        except Exception as e:
+            st.error(f"Error creating map: {str(e)}")
+    else:
+        st.warning("⚠️ No rooms with valid coordinates for map display.")
+
+
+def render_room_cards(df: pd.DataFrame):
+    rooms_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; padding: 10px 0;">'
+    
+    for idx, row in df.iterrows():
+        rooms_html += build_room_card_html(idx, row)
+    
+    rooms_html += '</div>'
+    rooms_html += get_click_script()
+    
+    st.markdown(rooms_html, unsafe_allow_html=True)
+
+
+def build_room_card_html(idx, row) -> str:
+    has_coords = pd.notna(row.get('latitude')) and pd.notna(row.get('longitude'))
+    
+    bg_color = '#ffffff' if has_coords else '#fffbf0'
+    border_color = '#4a90e2' if has_coords else '#ffc107'
+    text_color = '#262730'
+    
+    provider_name = str(row.get('provider', f'Room #{idx}')) if pd.notna(row.get('provider')) else f'Room #{idx}'
+    provider_name = provider_name.replace('<', '&lt;').replace('>', '&gt;')
+    
+    address_text = str(row.get('address', '')) if pd.notna(row.get('address')) else ''
+    address_text = address_text.replace('<', '&lt;').replace('>', '&gt;')
+    
+    room_id = f"room_{idx}"
+    
+    card_html = f'<div id="{room_id}" class="room-card-clickable" style="border: 2px solid {border_color}; border-radius: 8px; padding: 15px; background-color: {bg_color}; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">'
+    
+    card_html += f'<h4 style="margin-top: 0; color: {text_color}; margin-bottom: 10px; font-weight: 600;">{provider_name}</h4>'
+    
+    if address_text:
+        card_html += f'<p style="margin: 5px 0; color: #555; font-size: 14px;">📍 {address_text}</p>'
+    
+    if not has_coords:
+        card_html += '<p style="margin: 5px 0; color: #d68910; font-size: 12px; font-weight: 500;">⚠️ No coordinates</p>'
+    
+    rent_val = row.get('rent')
+    if pd.notna(rent_val) and float(rent_val) > 0:
+        card_html += f'<p style="margin: 8px 0 5px 0; font-size: 18px; font-weight: bold; color: #27ae60;">💰 €{float(rent_val):.0f}/month</p>'
+    else:
+        card_html += '<p style="margin: 8px 0 5px 0; font-size: 14px; color: #999;">💰 Rent: N/A</p>'
+    
+    card_html += '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">'
+    
+    card_html += '<div style="background: #f5f7fa; padding: 10px; border-radius: 5px; margin-top: 8px;">'
+    
+    if pd.notna(row.get('nearest_stop_name')):
+        stop_name = str(row["nearest_stop_name"]).replace('<', '&lt;').replace('>', '&gt;')
+        distance = row.get('nearest_stop_distance_m', 0)
+        if pd.notna(distance) and distance > 0:
+            card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Stop:</strong> {stop_name} <span style="color: #7f8c8d;">({distance:.0f}m)</span></p>'
+        else:
+            card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Stop:</strong> {stop_name}</p>'
+    
+    if pd.notna(row.get('walking_time_minutes')) and row['walking_time_minutes'] > 0:
+        card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #16a085;">🚶 To Station:</strong> {row["walking_time_minutes"]:.1f} min</p>'
+    
+    if pd.notna(row.get('total_commute_minutes')) and row['total_commute_minutes'] > 0:
+        card_html += f'<p style="margin: 8px 0 5px 0; font-size: 15px; font-weight: bold; color: #2980b9; background: #e8f4f8; padding: 6px; border-radius: 4px;">⏱️ Total Commute: {row["total_commute_minutes"]:.1f} min</p>'
+    
+    if pd.notna(row.get('transfers')):
+        card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #c0392b;">🔄 Transfers:</strong> {int(row["transfers"])}</p>'
+    
+    if pd.notna(row.get('route_details')):
+        try:
+            route_details = json.loads(row['route_details']) if isinstance(row['route_details'], str) else row['route_details']
+            if route_details:
+                for route in route_details:
+                    mode = route.get('mode', 'unknown')
+                    name = str(route.get('name', '')).replace('<', '&lt;').replace('>', '&gt;')
+                    mode_info = TRANSPORT_MODES.get(mode.lower(), {'display': mode.title(), 'color': '#8e44ad'})
+                    card_html += f'<p style="margin: 3px 0; padding: 6px; background: {mode_info["color"]}; color: white; border-radius: 4px; font-size: 12px; font-weight: bold;">{mode_info["display"]} {name}</p>'
+        except:
+            pass
+    
+    card_html += '</div>'
+    card_html += '</div>'
+    
+    return card_html
+
+
+def get_click_script() -> str:
+    return """
+    <script>
+    document.addEventListener('click', function(event) {
+        const card = event.target.closest('.room-card-clickable');
+        if (card) {
+            const roomId = card.id;
+            card.style.border = '3px solid #007bff';
+            card.style.boxShadow = '0 4px 12px rgba(0,123,255,0.3)';
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+    </script>
+    """
+
+
+def render_pagination(start_idx: int, end_idx: int, total_pages: int, total_rooms: int):
+    st.markdown("---")
+    pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
+    
+    with pagination_col1:
+        if st.button("◀ Previous", disabled=(st.session_state.current_page == 1), key="prev_page"):
+            st.session_state.current_page = max(1, st.session_state.current_page - 1)
+            st.rerun()
+    
+    with pagination_col2:
+        page_input = st.number_input(
+            f"Page {st.session_state.current_page} of {total_pages}",
+            min_value=1,
+            max_value=total_pages,
+            value=st.session_state.current_page,
+            key="page_input"
+        )
+        if page_input != st.session_state.current_page:
+            st.session_state.current_page = page_input
+            st.rerun()
+    
+    with pagination_col3:
+        if st.button("Next ▶", disabled=(st.session_state.current_page == total_pages), key="next_page"):
+            st.session_state.current_page = min(total_pages, st.session_state.current_page + 1)
+            st.rerun()
+    
+    st.caption(f"Showing rooms {start_idx + 1}-{min(end_idx, total_rooms)} of {total_rooms}")
+
+
+def render_area_analysis_button():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        show_area_analysis = st.button(
+            "🏆 Analyze Best Areas in Berlin",
+            type="secondary",
+            use_container_width=True,
+            help="View district-level analysis of transport accessibility and room availability"
+        )
+    
+    if show_area_analysis:
+        render_area_analysis()
+
+
+def render_area_analysis():
+    with st.expander("🏆 Best Areas in Berlin Analysis", expanded=True):
+        st.header("📊 District-Level Analysis")
+        st.markdown("""
+        This analysis identifies the best areas (districts) in Berlin for students based on:
+        - **Transport Accessibility**: Commute time to university, walking distance to stops
+        - **Room Availability**: Number of available rooms and providers
+        - **Affordability**: Average rent per district
+        - **Composite Score**: Combined metric for overall student suitability
+        """)
+        
+        with st.spinner("Analyzing districts..."):
+            analysis_results = analyze_best_areas(st.session_state.processed_df)
+            
+            ranked_areas = analysis_results['ranked_areas']
+            top_5_areas = analysis_results['top_5_areas']
+            
+            if len(ranked_areas) == 0:
+                st.error("No district data available.")
+                return
+            
+            st.subheader("🥇 Top 5 Best Areas for Students")
+            if top_5_areas:
+                top5_cols = st.columns(5)
+                medals = ["🥇", "🥈", "🥉", "4.", "5."]
+                colors = [("#FFD700", "#FFA500"), ("#C0C0C0", "#808080"), ("#CD7F32", "#8B4513"), ("#E8F4F8", "#3498db"), ("#E8F4F8", "#3498db")]
+                
+                for i, (col, district) in enumerate(zip(top5_cols, top_5_areas)):
+                    district_data = ranked_areas[ranked_areas['district'] == district].iloc[0]
+                    bg_color, border_color = colors[i]
+                    
+                    with col:
+                        st.markdown(f"""
+                        <div style="background-color: {bg_color}; border: 3px solid {border_color}; 
+                        border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 10px;">
+                        <h3 style="margin: 5px 0; color: #262730;">{medals[i]}</h3>
+                        <h4 style="margin: 10px 0; color: #262730; font-weight: bold;">{district}</h4>
+                        <p style="margin: 5px 0; font-size: 14px; color: #262730;"><strong>Score:</strong> {district_data['student_area_score']:.3f}</p>
+                        <p style="margin: 5px 0; font-size: 12px; color: #555;">🏠 {int(district_data.get('total_rooms', 0))} rooms</p>
+                        <p style="margin: 5px 0; font-size: 12px; color: #555;">💰 €{district_data.get('avg_rent', 0):.0f}/mo</p>
+                        <p style="margin: 5px 0; font-size: 12px; color: #555;">🚇 {district_data.get('avg_commute_minutes', 0):.1f} min</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            st.subheader("📋 Complete District Rankings")
+            
+            display_df = ranked_areas[[
+                'district', 'student_area_score', 'total_rooms',
+                'avg_rent', 'avg_commute_minutes', 'avg_walking_distance_m'
+            ]].copy()
+            display_df.columns = [
+                'District', 'Student Area Score', 'Total Rooms',
+                'Avg Rent (€)', 'Avg Commute (min)', 'Avg Walking (m)'
+            ]
+            display_df = display_df.round({
+                'Student Area Score': 3,
+                'Avg Rent (€)': 0,
+                'Avg Commute (min)': 1,
+                'Avg Walking (m)': 0
+            })
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
+            st.subheader("📈 Visualizations")
+            
+            try:
+                visuals = create_all_visualizations(analysis_results)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if visuals.get('score_chart'):
+                        st.pyplot(visuals['score_chart'])
+                    if visuals.get('histogram'):
+                        st.pyplot(visuals['histogram'])
+                
+                with col2:
+                    if visuals.get('rooms_chart'):
+                        st.pyplot(visuals['rooms_chart'])
+                    if visuals.get('scatter_plot'):
+                        st.pyplot(visuals['scatter_plot'])
+                
                 try:
-                    selected_room_id = st.session_state.get('selected_room_id', None)
+                    rq_results = run_all_research_questions(st.session_state.processed_df)
+                    rq_charts = create_research_question_charts(rq_results, st.session_state.processed_df)
                     
-                    map_color_by = 'suitability_score' if 'suitability_score' in df_for_map.columns else 'rent'
-                    
-                    m = create_interactive_map(
-                        df_for_map,
-                        st.session_state.university_coords,
-                        st.session_state.university_name,
-                        color_by=map_color_by,
-                        highlight_room_id=selected_room_id
-                    )
-                    
-                    map_html = get_map_html(m)
-                    components.html(map_html, height=600, scrolling=True)
-                    
-                    if total_rooms > ROOMS_PER_PAGE:
-                        total_in_page = len(df_paginated)
-                        st.caption(f"📍 Showing {len(df_for_map)} rooms with valid coordinates (Page {st.session_state.current_page}/{total_pages}, {total_in_page} total in page) + 1 university on map")
-                    else:
-                        st.caption(f"📍 Showing {len(df_for_map)} rooms with valid coordinates + 1 university on map")
-                except Exception as e:
-                    st.error(f"Error creating map: {str(e)}")
-            else:
-                st.warning("⚠️ No rooms with valid coordinates for map display.")
-        
-        st.markdown("---")
-        
-        st.subheader("🏠 Rooms List")
-        
-        rooms_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; padding: 10px 0;">'
-        
-        rooms_displayed = 0
-        for idx, row in df_paginated.iterrows():
-            rooms_displayed += 1
-            
-            has_coords = pd.notna(row.get('latitude')) and pd.notna(row.get('longitude'))
-            bg_color = '#ffffff' if has_coords else '#fffbf0'  # White for normal, very light yellow for no coords
-            border_color = '#4a90e2' if has_coords else '#ffc107'  # Blue border for normal, yellow for no coords
-            text_color = '#262730'  # Dark text for good contrast in light mode
-            
-            provider_name = str(row.get('provider', f'Room #{idx}')) if pd.notna(row.get('provider')) else f'Room #{idx}'
-            provider_name = provider_name.replace('<', '&lt;').replace('>', '&gt;')
-            address_text = str(row.get('address', '')) if pd.notna(row.get('address')) else ''
-            address_text = address_text.replace('<', '&lt;').replace('>', '&gt;')
-            
-            warning_icon = '⚠️' if not has_coords else ''
-            room_id = f"room_{idx}"
-            cursor_style = 'cursor: pointer;' if has_coords else ''
-            hover_style = 'transition: all 0.3s ease;' if has_coords else ''
-            data_attrs = ''
-            if has_coords:
-                lat = row.get('latitude')
-                lon = row.get('longitude')
-                if pd.notna(lat) and pd.notna(lon):
-                    data_attrs = f'data-room-id="{room_id}" data-room-lat="{lat}" data-room-lon="{lon}" class="room-card-clickable"'
-                else:
-                    data_attrs = 'class="room-card"'
-            else:
-                data_attrs = 'class="room-card"'
-            
-            card_html = f'<div id="{room_id}" {data_attrs} style="border: 2px solid {border_color}; border-radius: 8px; padding: 15px; background-color: {bg_color}; {cursor_style} {hover_style}; box-shadow: 0 2px 4px rgba(0,0,0,0.1); height: 100%; display: flex; flex-direction: column;">'
-            card_html += f'<h4 style="margin-top: 0; color: {text_color}; margin-bottom: 10px; font-weight: 600;">{provider_name} {warning_icon}</h4>'
-            
-            if pd.notna(row.get('address')):
-                card_html += f'<p style="margin: 5px 0; color: #555; font-size: 14px;">📍 {address_text}</p>'
-            
-            if not has_coords:
-                card_html += f'<p style="margin: 5px 0; color: #d68910; font-size: 12px; font-weight: 500;">⚠️ No coordinates</p>'
-            else:
-                lat = row.get('latitude', 'N/A')
-                lon = row.get('longitude', 'N/A')
-                if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
-                    card_html += f'<p style="margin: 5px 0; color: #27ae60; font-size: 11px;">✓ Coordinates available</p>'
-            
-            transport_section = False
-            has_transport_data = (
-                pd.notna(row.get('nearest_stop_name')) or
-                pd.notna(row.get('walking_time_minutes')) or
-                pd.notna(row.get('walking_from_stop_minutes')) or
-                pd.notna(row.get('route_details')) or
-                pd.notna(row.get('transport_modes')) or
-                pd.notna(row.get('transit_time_minutes')) or
-                pd.notna(row.get('total_commute_minutes')) or
-                pd.notna(row.get('transfers'))
-            )
-            
-            rent_val = row.get('rent')
-            
-            if pd.notna(rent_val):
-                try:
-                    rent_float = float(rent_val)
-                    if rent_float > 0:
-                        card_html += f'<p style="margin: 8px 0 5px 0; font-size: 18px; font-weight: bold; color: #27ae60;">💰 €{rent_float:.0f}/month</p>'
-                    else:
-                        card_html += '<p style="margin: 8px 0 5px 0; font-size: 14px; color: #999;">💰 Rent: N/A</p>'
-                except (ValueError, TypeError):
-                    card_html += '<p style="margin: 8px 0 5px 0; font-size: 14px; color: #999;">💰 Rent: N/A</p>'
-            else:
-                card_html += '<p style="margin: 8px 0 5px 0; font-size: 14px; color: #999;">💰 Rent: N/A</p>'
-            
-            card_html += '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">'
-            
-            if has_transport_data:
-                card_html += f'<div style="background: #f5f7fa; padding: 10px; border-radius: 5px; margin-top: 8px;">'
-            
-            if pd.notna(row.get('nearest_stop_name')):
-                stop_name = str(row["nearest_stop_name"]).replace('<', '&lt;').replace('>', '&gt;')
-                distance = row.get('nearest_stop_distance_m', 0)
-                if pd.notna(distance) and distance > 0:
-                    card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Stop:</strong> {stop_name} <span style="color: #7f8c8d;">({distance:.0f}m)</span></p>'
-                else:
-                    card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Stop:</strong> {stop_name}</p>'
-                transport_section = True
-            
-            if pd.notna(row.get('walking_time_minutes')) and row['walking_time_minutes'] > 0:
-                distance = row.get('nearest_stop_distance_m', 0)
-                if pd.notna(distance) and distance > 0:
-                    card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #16a085;">🚶 To Station:</strong> {row["walking_time_minutes"]:.1f} min ({distance:.0f}m)</p>'
-                else:
-                    card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #16a085;">🚶 To Station:</strong> {row["walking_time_minutes"]:.1f} min</p>'
-                transport_section = True
-            
-            if pd.notna(row.get('walking_from_stop_minutes')) and row['walking_from_stop_minutes'] > 0:
-                distance = row.get('final_stop_distance_m', 0)
-                if pd.notna(distance) and distance > 0:
-                    card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #16a085;">🚶 From Station:</strong> {row["walking_from_stop_minutes"]:.1f} min ({distance:.0f}m)</p>'
-                else:
-                    card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #16a085;">🚶 From Station:</strong> {row["walking_from_stop_minutes"]:.1f} min</p>'
-                transport_section = True
-            
-            route_details_value = row.get('route_details')
-            route_details_displayed = False
-            if pd.notna(route_details_value) and route_details_value and str(route_details_value).strip() != '' and str(route_details_value).lower() != 'none':
-                try:
-                    route_details_str = str(route_details_value)
-                    if route_details_str.startswith('[') or route_details_str.startswith('{'):
-                        route_details = json.loads(route_details_str)
-                    else:
-                        route_details = route_details_value
-                    
-                    if route_details and len(route_details) > 0:
-                        card_html += '<p style="margin: 8px 0 5px 0; font-size: 13px; color: ' + text_color + ';"><strong style="color: #8e44ad;">🚇 Routes:</strong></p>'
-                        route_details_displayed = True
-                        transport_section = True
+                    if rq_charts:
+                        st.markdown("---")
+                        st.subheader("📊 Research Questions Analysis")
                         
-                        if len(route_details) > 1:
-                            card_html += f'<p style="margin: 5px 0; font-size: 12px; color: #666;"><em>{len(route_details)} route segments with {len(route_details)-1} transfer(s)</em></p>'
-                        
-                        for idx, route in enumerate(route_details):
-                            mode = route.get('mode', 'unknown')
-                            name = route.get('name', '')
-                            from_stop = route.get('from', '')
-                            to_stop = route.get('to', '')
-                            
-                            mode_display_map = {
-                                'subway': 'U-Bahn',
-                                'suburban': 'S-Bahn',
-                                'bus': 'Bus',
-                                'tram': 'Tram',
-                                'public_transport': 'Public Transport'
-                            }
-                            mode_display = mode_display_map.get(mode.lower(), mode.title())
-                            
-                            mode_colors = {
-                                'subway': '#0066cc',
-                                'suburban': '#00cc00',
-                                'bus': '#ff6600',
-                                'tram': '#cc0000'
-                            }
-                            mode_color = mode_colors.get(mode.lower(), '#8e44ad')
-                            
-                            name_escaped = str(name).replace('<', '&lt;').replace('>', '&gt;').strip() if name and str(name) != 'nan' else ''
-                            from_stop_escaped = str(from_stop).replace('<', '&lt;').replace('>', '&gt;') if from_stop and str(from_stop) != 'nan' else ''
-                            to_stop_escaped = str(to_stop).replace('<', '&lt;').replace('>', '&gt;') if to_stop and str(to_stop) != 'nan' else ''
-                            
-                            route_text = f"{mode_display}"
-                            if name_escaped:
-                                route_text += f" <strong>{name_escaped}</strong>"
-                            
-                            if from_stop_escaped and to_stop_escaped:
-                                route_text += f"<br><span style='font-size: 11px; opacity: 0.9;'>{from_stop_escaped} → {to_stop_escaped}</span>"
-                            
-                            if len(route_details) > 1:
-                                step_num = idx + 1
-                                route_text = f"<span style='background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 10px; margin-right: 5px; font-size: 10px;'>Step {step_num}</span>" + route_text
-                            
-                            card_html += f'<p style="margin: 3px 0; padding: 6px; background: {mode_color}; color: white; border-radius: 4px; font-size: 12px; font-weight: bold; line-height: 1.4;">{route_text}</p>'
+                        rq_col1, rq_col2 = st.columns(2)
+                        with rq_col1:
+                            if 'rq1_scatter' in rq_charts:
+                                st.pyplot(rq_charts['rq1_scatter'])
+                            if 'rq4_bar' in rq_charts:
+                                st.pyplot(rq_charts['rq4_bar'])
+                        with rq_col2:
+                            if 'rq3_scatter' in rq_charts:
+                                st.pyplot(rq_charts['rq3_scatter'])
+                            if 'rq5_bar' in rq_charts:
+                                st.pyplot(rq_charts['rq5_bar'])
                 except Exception as e:
-                    pass
-            
-            if not route_details_displayed and pd.notna(row.get('transport_modes')) and row['transport_modes']:
-                modes_str = str(row['transport_modes'])
-                mode_display_map = {
-                    'subway': 'U-Bahn',
-                    'suburban': 'S-Bahn',
-                    'bus': 'Bus',
-                    'tram': 'Tram',
-                    'public_transport': 'Public Transport'
-                }
-                modes_list = [m.strip() for m in modes_str.split(',')]
-                formatted_modes = [mode_display_map.get(m.lower(), m.title()) for m in modes_list]
-                modes_display = ', '.join(formatted_modes)
-                modes_display = modes_display.replace('<', '&lt;').replace('>', '&gt;')
+                    st.warning(f"Could not generate research question charts: {str(e)}")
                 
-                if not transport_section:
-                    card_html += '<p style="margin: 8px 0 5px 0; font-size: 13px; color: ' + text_color + ';"><strong style="color: #8e44ad;">🚇 Transport Types:</strong></p>'
-                
-                for mode in modes_list:
-                    mode_lower = mode.lower().strip()
-                    mode_colors = {
-                        'subway': '#0066cc',
-                        'suburban': '#00cc00',
-                        'bus': '#ff6600',
-                        'tram': '#cc0000'
-                    }
-                    mode_color = mode_colors.get(mode_lower, '#8e44ad')
-                    mode_display_name = mode_display_map.get(mode_lower, mode.title())
-                    card_html += f'<p style="margin: 3px 0; padding: 6px; background: {mode_color}; color: white; border-radius: 4px; font-size: 12px; font-weight: bold;">{mode_display_name}</p>'
-                
-                transport_section = True
-            
-            if pd.notna(row.get('transit_time_minutes')) and row['transit_time_minutes'] > 0:
-                card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #e67e22;">🚊 Transit:</strong> {row["transit_time_minutes"]:.1f} min</p>'
-                transport_section = True
-            
-            if pd.notna(row.get('total_commute_minutes')) and row['total_commute_minutes'] > 0:
-                card_html += f'<p style="margin: 8px 0 5px 0; font-size: 15px; font-weight: bold; color: #2980b9; background: #e8f4f8; padding: 6px; border-radius: 4px;">⏱️ Total Commute: {row["total_commute_minutes"]:.1f} min</p>'
-                transport_section = True
-            
-            if pd.notna(row.get('transfers')):
-                transfers = int(row['transfers']) if pd.notna(row['transfers']) else 0
-                card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #c0392b;">🔄 Transfers:</strong> {transfers}</p>'
-                transport_section = True
-            
-            if not transport_section and has_transport_data:
-                if has_coords:
-                    if pd.notna(row.get('nearest_stop_name')):
-                        stop_name = str(row.get('nearest_stop_name'))
-                        distance = row.get('nearest_stop_distance_m', 0)
-                        if pd.notna(distance) and distance > 0:
-                            card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Nearest Stop:</strong> {stop_name} <span style="color: #7f8c8d;">({distance:.0f}m)</span></p>'
-                        else:
-                            card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Nearest Stop:</strong> {stop_name}</p>'
-                    else:
-                        card_html += f'<p style="margin: 5px 0; font-size: 12px; color: #95a5a6;">Transport data: N/A (no nearby stop found)</p>'
-                else:
-                    card_html += f'<p style="margin: 5px 0; font-size: 12px; color: #95a5a6;">Transport data: N/A (no coordinates)</p>'
-            
-            if has_transport_data:
-                card_html += '</div>'  # Close transport details div
-            
-            card_html += '</div>'
-            rooms_html += card_html
-        
-        rooms_html += '</div>'
-        
-        click_script = """
-        <script>
-        // Event delegation for room card clicks (avoids React errors with inline onclick)
-            document.addEventListener('click', function(event) {
-                const card = event.target.closest('.room-card-clickable');
-                if (card) {
-                    const roomId = card.getAttribute('data-room-id');
-                    const lat = parseFloat(card.getAttribute('data-room-lat'));
-                    const lon = parseFloat(card.getAttribute('data-room-lon'));
-                    
-                    if (roomId && !isNaN(lat) && !isNaN(lon)) {
-                        focusRoomOnMap(roomId, lat, lon);
-                    }
-                }
-            });
-            
-            function focusRoomOnMap(roomId, lat, lon) {
-                // Highlight the clicked card
-                const card = document.getElementById(roomId);
-                if (card) {
-                    document.querySelectorAll('.room-card-clickable, .room-card').forEach(c => {
-                        const originalBorder = c.getAttribute('data-original-border') || '2px solid #ddd';
-                        c.style.border = originalBorder;
-                        c.style.boxShadow = 'none';
-                    });
-                    
-                    if (!card.getAttribute('data-original-border')) {
-                        card.setAttribute('data-original-border', card.style.border || '2px solid #ddd');
-                    }
-                    
-                    card.style.border = '3px solid #007bff';
-                    card.style.boxShadow = '0 4px 12px rgba(0,123,255,0.3)';
-                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                
-                // Send message to map iframe
-                setTimeout(function() {
-                    const mapFrames = document.querySelectorAll('iframe');
-                    mapFrames.forEach(function(frame) {
-                        if (frame.contentWindow) {
-                            try {
-                                frame.contentWindow.postMessage({
-                                    type: 'focusRoom',
-                                    roomId: roomId,
-                                    lat: lat,
-                                    lon: lon
-                                }, '*');
-                            } catch(e) {}
-                        }
-                    });
-                }, 100);
-            }
-            </script>
-            """
-        rooms_html += click_script
-        
-        st.markdown(rooms_html, unsafe_allow_html=True)
-        
-        if total_rooms > ROOMS_PER_PAGE:
                 st.markdown("---")
-                pagination_col1, pagination_col2, pagination_col3 = st.columns([1, 2, 1])
+                st.subheader("🗺️ District Map")
+                if 'map' in visuals and visuals['map'] is not None:
+                    map_html = get_map_html(visuals['map'])
+                    components.html(map_html, height=600, scrolling=False)
                 
-                with pagination_col1:
-                    if st.button("◀ Previous", disabled=(st.session_state.current_page == 1), key="prev_page"):
-                        st.session_state.current_page = max(1, st.session_state.current_page - 1)
-                        st.rerun()
-                
-                with pagination_col2:
-                    page_input = st.number_input(
-                        f"Page {st.session_state.current_page} of {total_pages}",
-                        min_value=1,
-                        max_value=total_pages,
-                        value=st.session_state.current_page,
-                        key="page_input",
-                        on_change=lambda: setattr(st.session_state, 'current_page', st.session_state.page_input)
-                    )
-                    if page_input != st.session_state.current_page:
-                        st.session_state.current_page = page_input
-                        st.rerun()
-                
-                with pagination_col3:
-                    if st.button("Next ▶", disabled=(st.session_state.current_page == total_pages), key="next_page"):
-                        st.session_state.current_page = min(total_pages, st.session_state.current_page + 1)
-                        st.rerun()
-                
-                st.caption(f"Showing rooms {start_idx + 1}-{min(end_idx, total_rooms)} of {total_rooms} (Page {st.session_state.current_page}/{total_pages})")
-        
-        st.markdown("---")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            show_area_analysis = st.button(
-                "🏆 Analyze Best Areas in Berlin",
-                type="secondary",
-                use_container_width=True,
-                help="View district-level analysis of transport accessibility and room availability"
-            )
-        
-        if show_area_analysis:
-            with st.expander("🏆 Best Areas in Berlin Analysis", expanded=True):
-                st.header("📊 District-Level Analysis")
-                st.markdown("""
-                This analysis identifies the best areas (districts) in Berlin for students based on:
-                - **Transport Accessibility**: Commute time to university, walking distance to stops
-                - **Room Availability**: Number of available rooms and providers
-                - **Affordability**: Average rent per district
-                - **Composite Score**: Combined metric for overall student suitability
-                """)
-                
-                if 'processed_df' not in st.session_state or st.session_state.processed_df is None:
-                    st.warning("⚠️ Please run the full analysis first to see area rankings.")
-                else:
-                    with st.spinner("Analyzing districts..."):
-                        analysis_results = analyze_best_areas(st.session_state.processed_df)
-                        
-                        ranked_areas = analysis_results['ranked_areas']
-                        top_5_areas = analysis_results['top_5_areas']
-                        
-                        if len(ranked_areas) == 0:
-                            st.error("No district data available. Make sure apartments have valid coordinates.")
-                        else:
-                            st.subheader("🥇 Top 5 Best Areas for Students")
-                            if top_5_areas:
-                                top5_cols = st.columns(5)
-                                for i, (col, district) in enumerate(zip(top5_cols, top_5_areas)):
-                                    district_data = ranked_areas[ranked_areas['district'] == district].iloc[0]
-                                    medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}."
-                                    
-                                    if i == 0:
-                                        bg_color = "#FFD700"  # Gold
-                                        border_color = "#FFA500"
-                                    elif i == 1:
-                                        bg_color = "#C0C0C0"  # Silver
-                                        border_color = "#808080"
-                                    elif i == 2:
-                                        bg_color = "#CD7F32"  # Bronze
-                                        border_color = "#8B4513"
-                                    else:
-                                        bg_color = "#E8F4F8"
-                                        border_color = "#3498db"
-                                    
-                                    with col:
-                                        st.markdown(f"""
-                                        <div style="background-color: {bg_color}; border: 3px solid {border_color}; 
-                                        border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 10px;">
-                                        <h3 style="margin: 5px 0; color: #262730;">{medal}</h3>
-                                        <h4 style="margin: 10px 0; color: #262730; font-weight: bold;">{district}</h4>
-                                        <p style="margin: 5px 0; font-size: 14px; color: #262730;"><strong>Score:</strong> {district_data['student_area_score']:.3f}</p>
-                                        <p style="margin: 5px 0; font-size: 12px; color: #555;">🏠 {int(district_data.get('total_rooms', 0))} rooms</p>
-                                        <p style="margin: 5px 0; font-size: 12px; color: #555;">💰 €{district_data.get('avg_rent', 0):.0f}/mo</p>
-                                        <p style="margin: 5px 0; font-size: 12px; color: #555;">🚇 {district_data.get('avg_commute_minutes', 0):.1f} min</p>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            
-                            st.markdown("---")
-                            
-                            st.subheader("📋 Complete District Rankings")
-                            display_df = ranked_areas[[
-                                'district', 'student_area_score', 'total_rooms', 
-                                'avg_rent', 'avg_commute_minutes', 'avg_walking_distance_m'
-                            ]].copy()
-                            display_df.columns = [
-                                'District', 'Student Area Score', 'Total Rooms',
-                                'Avg Rent (€)', 'Avg Commute (min)', 'Avg Walking (m)'
-                            ]
-                            display_df = display_df.round({
-                                'Student Area Score': 3,
-                                'Avg Rent (€)': 0,
-                                'Avg Commute (min)': 1,
-                                'Avg Walking (m)': 0
-                            })
-                            st.dataframe(display_df, use_container_width=True, hide_index=True)
-                            
-                            st.markdown("---")
-                            
-                            st.subheader("📈 Visualizations")
-                            
-                            try:
-                                visuals = create_all_visualizations(analysis_results)
-                                
-                                rq_results = {}
-                                rq_charts = {}
-                                try:
-                                    rq_results = run_all_research_questions(st.session_state.processed_df)
-                                    rq_charts = create_research_question_charts(rq_results, st.session_state.processed_df)
-                                except Exception as e:
-                                    st.warning(f"Could not generate research question charts: {str(e)}")
-                                    rq_charts = {}
-                                
-                                col1, col2 = st.columns(2)
-                                
-                                with col1:
-                                    if visuals.get('score_chart'):
-                                        st.pyplot(visuals['score_chart'])
-                                    if visuals.get('histogram'):
-                                        st.pyplot(visuals['histogram'])
-                                
-                                with col2:
-                                    if visuals.get('rooms_chart'):
-                                        st.pyplot(visuals['rooms_chart'])
-                                    if visuals.get('scatter_plot'):
-                                        st.pyplot(visuals['scatter_plot'])
-                                
-                                if rq_charts:
-                                    st.markdown("---")
-                                    st.subheader("📊 Research Questions Analysis")
-                                    
-                                    if 'rq1_scatter' in rq_charts or 'rq3_scatter' in rq_charts:
-                                        rq_col1, rq_col2 = st.columns(2)
-                                        with rq_col1:
-                                            if 'rq1_scatter' in rq_charts:
-                                                st.pyplot(rq_charts['rq1_scatter'])
-                                        with rq_col2:
-                                            if 'rq3_scatter' in rq_charts:
-                                                st.pyplot(rq_charts['rq3_scatter'])
-                                    
-                                    if 'rq4_bar' in rq_charts or 'rq5_bar' in rq_charts:
-                                        rq_col3, rq_col4 = st.columns(2)
-                                        with rq_col3:
-                                            if 'rq4_bar' in rq_charts:
-                                                st.pyplot(rq_charts['rq4_bar'])
-                                        with rq_col4:
-                                            if 'rq5_bar' in rq_charts:
-                                                st.pyplot(rq_charts['rq5_bar'])
-                                
-                                st.markdown("---")
-                                st.subheader("🗺️ District Map (Colored by Student Area Score)")
-                                if 'map' in visuals and visuals['map'] is not None:
-                                    map_html = get_map_html(visuals['map'])
-                                    components.html(map_html, height=600, scrolling=False)
-                                
-                            except Exception as e:
-                                st.error(f"Error creating visualizations: {str(e)}")
-                            st.markdown("---")
-                            st.subheader("💡 Key Insights")
-                            
-                            if len(ranked_areas) > 0:
-                                expensive_but_accessible = ranked_areas[
-                                    (ranked_areas['avg_rent'] > ranked_areas['avg_rent'].median()) &
-                                    (ranked_areas['avg_commute_minutes'] < ranked_areas['avg_commute_minutes'].median())
-                                ]
-                                
-                                affordable_but_remote = ranked_areas[
-                                    (ranked_areas['avg_rent'] < ranked_areas['avg_rent'].median()) &
-                                    (ranked_areas['avg_commute_minutes'] > ranked_areas['avg_commute_minutes'].median())
-                                ]
-                                
-                                if len(expensive_but_accessible) > 0:
-                                    st.info(f"**Transport-Rich but Expensive**: {', '.join(expensive_but_accessible.head(3)['district'].tolist())}")
-                                
-                                if len(affordable_but_remote) > 0:
-                                    st.info(f"**Affordable but Transport-Poor**: {', '.join(affordable_but_remote.head(3)['district'].tolist())}")
-                            
+            except Exception as e:
+                st.error(f"Error creating visualizations: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
-

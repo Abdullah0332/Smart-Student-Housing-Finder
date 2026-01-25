@@ -14,7 +14,7 @@ A comprehensive system for ranking student accommodations in Berlin based on:
 
 This project demonstrates how **urban mobility data** and **geospatial analysis** can inform housing decisions. It integrates:
 
-- **BVG Transport API** for realistic journey planning
+- **Local GTFS Data** for realistic journey planning (offline)
 - **OpenStreetMap/Nominatim** for geocoding
 - **Geospatial network analysis** for distance calculations
 - **Multi-criteria decision analysis** for ranking
@@ -41,11 +41,10 @@ The application will open in your browser at `http://localhost:8501`
 
 ### 3. Use the Application
 
-1. **Upload Data**: Upload your accommodation Excel/CSV file in the sidebar
-2. **Select University**: Enter your university name or address
-3. **Configure Parameters**: Adjust filters and scoring weights
-4. **Run Analysis**: Click "Run Full Analysis" (this may take several minutes)
-5. **View Results**: Explore rankings, provider comparisons, and interactive map
+1. **Select University**: Choose your university from the dropdown
+2. **Data Loading**: Default accommodation data loads automatically
+3. **Run Analysis**: Click "Run Full Analysis" (geocoding + transport + scoring)
+4. **View Results**: Explore rankings, provider comparisons, and interactive map
 
 ---
 
@@ -53,99 +52,127 @@ The application will open in your browser at `http://localhost:8501`
 
 ```
 project/
-├── app.py                 # Streamlit UI (main application)
-├── data_loader.py         # Excel/CSV data loading and filtering
-├── geocoding.py           # Address → coordinates (Nominatim)
-├── transport.py           # BVG API integration
-├── walking.py             # OSMnx walking routes
-├── scoring.py             # Ranking and scoring logic
-├── visualization.py       # Folium map visualization
-├── requirements.txt       # Python dependencies
-└── README.md             # This file
+├── app.py                      # Main Streamlit application (entry point)
+├── requirements.txt            # Python dependencies
+├── README.md                   # This file
+├── .gitignore                  # Git ignore rules
+│
+├── config/                     # Configuration
+│   ├── __init__.py
+│   └── settings.py             # App settings, constants, weights
+│
+├── src/                        # Source code modules
+│   ├── __init__.py
+│   │
+│   ├── data/                   # Data loading and management
+│   │   ├── __init__.py
+│   │   ├── loader.py           # CSV/Excel data loading
+│   │   └── universities.py     # Berlin universities database
+│   │
+│   ├── geo/                    # Geospatial modules
+│   │   ├── __init__.py
+│   │   └── geocoding.py        # Address → coordinates (Nominatim)
+│   │
+│   ├── transport/              # Transport analysis
+│   │   ├── __init__.py
+│   │   ├── gtfs.py             # GTFS data processing (BVG)
+│   │   └── commute.py          # Commute calculation
+│   │
+│   ├── analysis/               # Analysis and scoring
+│   │   ├── __init__.py
+│   │   ├── scoring.py          # Student suitability scoring
+│   │   ├── area.py             # District-level analysis
+│   │   └── research.py         # Research questions analysis
+│   │
+│   └── visualization/          # Visualization modules
+│       ├── __init__.py
+│       ├── maps.py             # Folium map visualization
+│       └── charts.py           # Matplotlib charts
+│
+├── data/                       # Data files
+│   └── Accomodations.csv       # Accommodation data
+│
+└── GTFS/                       # GTFS transit data (Berlin BVG)
+    ├── stops.txt
+    ├── routes.txt
+    ├── trips.txt
+    └── stop_times.txt
 ```
 
 ---
 
 ## 🔧 Key Features
 
-### Data Processing
+### Data Processing (`src/data/`)
 - Loads accommodation data from Excel/CSV
 - Filters for Berlin-only accommodations
+- Smart column mapping (rent, address, provider)
 - Handles missing data gracefully
 
-### Geocoding
+### Geocoding (`src/geo/`)
 - Converts addresses to coordinates using Nominatim
+- Provider-specific geocoding functions
 - Respects rate limits (1 request/second)
-- Provides progress indicators
+- Persistent caching (geocode_cache.json)
 
-### Transport Analysis
+### Transport Analysis (`src/transport/`)
+- Uses local GTFS data (offline, fast)
 - Finds nearest BVG public transport stops
 - Calculates door-to-door commute times
 - Identifies transport modes (U-Bahn, S-Bahn, Tram, Bus)
 - Counts transfers
 
-### Scoring System
-- **Affordability Score**: Lower rent = higher score
-- **Commute Score**: Shorter commute = higher score
-- **Walking Score**: Shorter walk = higher score
-- **Transfers Score**: Fewer transfers = higher score
+### Scoring System (`src/analysis/`)
+- **Affordability Score**: Lower rent = higher score (35%)
+- **Commute Score**: Shorter commute = higher score (40%)
+- **Walking Score**: Shorter walk = higher score (15%)
+- **Transfers Score**: Fewer transfers = higher score (10%)
 - **Composite Score**: Weighted combination (0-100 scale)
 
-### Visualization
+### Visualization (`src/visualization/`)
 - Interactive map with apartment locations
 - Color-coded by score, rent, or commute time
 - University location marker
 - Multiple base map layers
+- District-level charts and analysis
 
 ---
 
-## 📊 Input Data Format
+## 📊 Research Questions
 
-Your accommodation data should include columns such as:
-- `City` or `city` - Must contain "Berlin" for filtering
-- `Address` or `address` - Street address
-- `Provider` or `provider` - Accommodation provider name
-- `Rent (in €/All-In)` or `rent` - Monthly rent price
+The system includes statistical analysis for academic research:
 
-The system will automatically detect and map common column names.
-
----
-
-## 🔌 API Usage
-
-### BVG Transport API
-- **Base URL**: `https://v6.bvg.transport.rest`
-- **No API key required**
-- Rate limiting: ~0.5 seconds between requests recommended
-- Endpoints used:
-  - `/stops/nearby` - Find nearest stops
-  - `/journeys` - Plan routes
-
-### Nominatim (Geocoding)
-- **Service**: OpenStreetMap Nominatim
-- **No API key required**
-- Rate limiting: 1 request/second
-- User agent required
+1. **RQ1**: How does public transport accessibility affect housing affordability?
+2. **RQ2**: Which Berlin districts offer the best transport-housing balance?
+3. **RQ3**: What is the relationship between walking distance and room availability?
+4. **RQ4**: How do different platforms vary in transport accessibility?
+5. **RQ5**: What is the spatial equity of student housing in Berlin?
 
 ---
 
 ## ⚙️ Configuration
 
+All configuration is centralized in `config/settings.py`:
+
 ### Scoring Weights
+```python
+SCORING_WEIGHTS = {
+    'rent': 0.35,
+    'commute': 0.40,
+    'walking': 0.15,
+    'transfers': 0.10
+}
+```
 
-Adjust weights in the sidebar:
-- **Affordability Weight** (default: 0.35)
-- **Commute Time Weight** (default: 0.40)
-- **Walking Distance Weight** (default: 0.15)
-- **Transfers Weight** (default: 0.10)
-
-Weights are automatically normalized to sum to 1.0.
-
-### Filters
-
-- **Max Rent**: Filter apartments by maximum rent (€)
-- **Max Commute Time**: Filter by maximum commute (minutes)
-- **Max Walking Distance**: Filter by maximum walking distance (meters)
+### Transport Settings
+```python
+TRANSPORT = {
+    'walking_speed_kmh': 5.0,
+    'transit_speed_kmh': 30.0,
+    'transfer_penalty_minutes': 5,
+    'max_walking_radius_m': 2000,
+}
+```
 
 ---
 
@@ -164,21 +191,14 @@ This project demonstrates several key urban technology concepts:
 ## 📝 Notes
 
 ### Performance
-- Geocoding may take several minutes for large datasets (1 second per address)
-- Transport API calls may take 10-30 minutes for 100+ apartments
-- Consider testing with a subset first
+- GTFS data processing is fast and offline
+- Geocoding may take time for new addresses (cached for reuse)
+- Consider testing with a subset first for large datasets
 
 ### Limitations
-- Requires internet connection for API calls
-- Rate limits may slow down processing
+- Requires GTFS data in the GTFS/ folder
 - Some addresses may fail to geocode
-
-### Future Enhancements
-- Cache geocoding results
-- Batch API requests more efficiently
-- Add more transport modes (bike, car)
-- Include neighborhood amenities
-- Historical price trends
+- Commute times are estimates based on average speeds
 
 ---
 
@@ -188,11 +208,11 @@ See `requirements.txt` for complete list. Key libraries:
 
 - **pandas**: Data manipulation
 - **streamlit**: Web interface
-- **requests**: API calls
 - **geopy**: Geocoding
-- **osmnx**: Network analysis
 - **folium**: Map visualization
+- **scipy**: Statistical analysis
 - **scikit-learn**: Data normalization
+- **matplotlib**: Charts
 
 ---
 
@@ -200,9 +220,9 @@ See `requirements.txt` for complete list. Key libraries:
 
 This is a course project. For improvements:
 1. Test with sample data
-2. Ensure API rate limits are respected
+2. Ensure proper error handling
 3. Add clear documentation
-4. Handle errors gracefully
+4. Follow the modular structure
 
 ---
 
@@ -214,34 +234,10 @@ Educational project for Urban Technology course.
 
 ## 🙏 Acknowledgments
 
-- **BVG** for public transport API
+- **BVG** for GTFS transit data
 - **OpenStreetMap** contributors for geospatial data
 - **Nominatim** for geocoding service
 
 ---
 
-## ❓ Troubleshooting
-
-### "No accommodations found"
-- Check that your data has a "City" column containing "Berlin"
-- Verify the file format is CSV or Excel
-
-### "Geocoding failed"
-- Check internet connection
-- Verify addresses are valid Berlin addresses
-- Wait between large batches (rate limiting)
-
-### "API error"
-- BVG API may be temporarily unavailable
-- Check internet connection
-- Reduce batch size or increase delays
-
-### Map not displaying
-- Ensure folium is installed
-- Check browser console for errors
-- Try a different browser
-
----
-
 **Happy apartment hunting! 🏠🚇**
-
