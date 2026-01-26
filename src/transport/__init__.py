@@ -6,9 +6,16 @@ from .gtfs import (
     find_route_between_stops,
     get_gtfs_commute_info,
     haversine_distance,
-    detect_transport_mode
+    get_transport_mode_from_route_type
 )
 from .commute import get_commute_info, batch_get_commute_info
+from .walkability import (
+    get_walkability_mobility_info,
+    batch_get_walkability_info,
+    get_pois_within_radius,
+    get_bike_infrastructure,
+    calculate_walkability_score
+)
 
 __all__ = [
     'load_gtfs_stops',
@@ -18,7 +25,12 @@ __all__ = [
     'find_route_between_stops',
     'get_gtfs_commute_info',
     'haversine_distance',
-    'detect_transport_mode',
+    'get_transport_mode_from_route_type',
     'get_commute_info',
-    'batch_get_commute_info'
+    'batch_get_commute_info',
+    'get_walkability_mobility_info',
+    'batch_get_walkability_info',
+    'get_pois_within_radius',
+    'get_bike_infrastructure',
+    'calculate_walkability_score'
 ]

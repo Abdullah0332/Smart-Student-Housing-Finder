@@ -18,6 +18,19 @@ from .research import (
     analyze_rq3_walking_vs_availability,
     analyze_rq4_platform_differences,
     analyze_rq5_spatial_equity,
+    analyze_rq6_walkability_vs_rent,
+    analyze_rq7_walkability_vs_commute,
+    analyze_rq8_poi_vs_availability,
+    analyze_rq9_bike_vs_walkability,
+    analyze_rq10_multimodal_mobility,
+    analyze_rq11_amenities_vs_walkability,
+    analyze_rq12_bike_vs_commute,
+    analyze_rq13_walkability_by_district,
+    analyze_rq14_poi_density_vs_walkability,
+    analyze_rq15_essential_services_vs_availability,
+    analyze_rq16_bike_vs_rent,
+    analyze_rq17_walkability_vs_transfers,
+    analyze_rq18_walkability_affordability_ratio,
     run_all_research_questions
 )
 
@@ -37,5 +50,18 @@ __all__ = [
     'analyze_rq3_walking_vs_availability',
     'analyze_rq4_platform_differences',
     'analyze_rq5_spatial_equity',
+    'analyze_rq6_walkability_vs_rent',
+    'analyze_rq7_walkability_vs_commute',
+    'analyze_rq8_poi_vs_availability',
+    'analyze_rq9_bike_vs_walkability',
+    'analyze_rq10_multimodal_mobility',
+    'analyze_rq11_amenities_vs_walkability',
+    'analyze_rq12_bike_vs_commute',
+    'analyze_rq13_walkability_by_district',
+    'analyze_rq14_poi_density_vs_walkability',
+    'analyze_rq15_essential_services_vs_availability',
+    'analyze_rq16_bike_vs_rent',
+    'analyze_rq17_walkability_vs_transfers',
+    'analyze_rq18_walkability_affordability_ratio',
     'run_all_research_questions'
 ]

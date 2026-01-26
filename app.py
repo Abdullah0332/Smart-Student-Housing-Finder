@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from src.data import load_accommodation_data, validate_data
 from src.data import get_university_list, get_university_info, get_university_coords
 from src.geo import geocode_dataframe, geocode_university
-from src.transport import batch_get_commute_info
+from src.transport import batch_get_commute_info, batch_get_walkability_info
 from src.analysis import calculate_student_suitability_score, analyze_best_areas
 from src.analysis import RESEARCH_QUESTIONS, run_all_research_questions
 from src.visualization import create_interactive_map, get_map_html
@@ -306,7 +306,7 @@ def run_full_analysis():
         geocoded_count = df['latitude'].notna().sum() if 'latitude' in df.columns else 0
         progress_details.text(f"✓ Step 1/2 Complete: Using existing coordinates ({geocoded_count} rooms)")
     
-    status_text.text("🚇 Step 2/2: Calculating Commute Times & Distances")
+    status_text.text("🚇 Step 2/3: Calculating Commute Times & Distances")
     progress_details.text("Using local GTFS data for fast, offline route planning...")
     
     successful_count = 0
@@ -314,9 +314,9 @@ def run_full_analysis():
     def update_commute_progress(idx, total, cached, new):
         nonlocal successful_count
         successful_count = cached + new
-        progress = 0.5 + (idx / total) * 0.5 if total > 0 else 0.5
+        progress = 0.5 + (idx / total) * 0.33 if total > 0 else 0.5
         progress_bar.progress(progress)
-        progress_details.text(f"🚇 Step 2/2: Calculating Commute | Progress: {idx}/{total} apartments | {successful_count} successful")
+        progress_details.text(f"🚇 Step 2/3: Calculating Commute | Progress: {idx}/{total} apartments | {successful_count} successful")
     
     batch_get_commute_info(
         df,
@@ -326,8 +326,25 @@ def run_full_analysis():
         progress_callback=update_commute_progress
     )
     
-    progress_bar.progress(1.0)
-    progress_details.text(f"✓ Step 2/2 Complete: Processed {len(df)} apartments using GTFS data")
+    progress_bar.progress(0.66)
+    progress_details.text(f"✓ Step 2/3 Complete: Processed {len(df)} apartments using GTFS data")
+    
+    status_text.text("🚶 Step 3/3: Analyzing Walkability & Mobility")
+    progress_details.text("Fetching live OpenStreetMap data for walkability metrics...")
+    
+    def update_walkability_progress(processed, total):
+        progress = 0.66 + (processed / total) * 0.24 if total > 0 else 0.66
+        progress_bar.progress(progress)
+        progress_details.text(f"🚶 Step 3/3: Walkability Analysis | Progress: {processed}/{total} apartments | Fetching POIs, bike infrastructure...")
+    
+    batch_get_walkability_info(
+        df,
+        delay=1.0,  # Rate limiting for Overpass API
+        progress_callback=update_walkability_progress
+    )
+    
+    progress_bar.progress(0.9)
+    progress_details.text(f"✓ Step 3/3 Complete: Analyzed walkability for {len(df)} apartments")
     
     status_text.text("⭐ Calculating Scores...")
     progress_details.text("Computing composite suitability scores...")
@@ -508,13 +525,17 @@ def render_map(df: pd.DataFrame):
 
 
 def render_room_cards(df: pd.DataFrame):
+    from streamlit.components.v1 import html as components_html
+    
     if 'provider' not in df.columns or df['provider'].isna().all():
         rooms_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; padding: 10px 0;">'
         for idx, row in df.iterrows():
             rooms_html += build_room_card_html(idx, row, show_provider=True)
         rooms_html += '</div>'
         rooms_html += get_click_script()
-        st.markdown(rooms_html, unsafe_allow_html=True)
+        # Wrap in complete HTML document for components.html
+        full_html = f'<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>{rooms_html}</body></html>'
+        components_html(full_html, height=600, scrolling=True)
         return
     
     grouped = df.groupby('provider', sort=True)
@@ -535,7 +556,7 @@ def render_room_cards(df: pd.DataFrame):
         color_scheme = provider_colors[provider_idx % len(provider_colors)]
         room_count = len(provider_df)
         
-        provider_display = str(provider_name).replace('<', '&lt;').replace('>', '&gt;')
+        provider_display = escape_html(str(provider_name))
         
         rooms_html += f'''
         <div style="margin-bottom: 40px;">
@@ -559,7 +580,23 @@ def render_room_cards(df: pd.DataFrame):
         rooms_html += '</div></div>'
     
     rooms_html += get_click_script()
-    st.markdown(rooms_html, unsafe_allow_html=True)
+    # Wrap in complete HTML document for components.html
+    from streamlit.components.v1 import html as components_html
+    full_html = f'<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>{rooms_html}</body></html>'
+    components_html(full_html, height=600, scrolling=True)
+
+
+def escape_html(text):
+    """Escape HTML special characters to prevent JavaScript syntax errors."""
+    if pd.isna(text) or text is None:
+        return ''
+    text = str(text)
+    return (text
+            .replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+            .replace('"', '&quot;')
+            .replace("'", '&#x27;'))
 
 
 def build_room_card_html(idx, row, show_provider: bool = True) -> str:
@@ -570,10 +607,10 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
     text_color = '#262730'
     
     provider_name = str(row.get('provider', f'Room #{idx}')) if pd.notna(row.get('provider')) else f'Room #{idx}'
-    provider_name = provider_name.replace('<', '&lt;').replace('>', '&gt;')
+    provider_name = escape_html(provider_name)
     
     address_text = str(row.get('address', '')) if pd.notna(row.get('address')) else ''
-    address_text = address_text.replace('<', '&lt;').replace('>', '&gt;')
+    address_text = escape_html(address_text)
     
     room_id = f"room_{idx}"
     
@@ -594,19 +631,22 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
         if not apartment_title:
             apartment_title = f"Apartment #{idx + 1}"
         
-        apartment_title = apartment_title.replace('<', '&lt;').replace('>', '&gt;')
+        apartment_title = escape_html(apartment_title)
         card_html += f'<h4 style="margin-top: 0; color: {text_color}; margin-bottom: 10px; font-weight: 600;">{apartment_title}</h4>'
     
     details_parts = []
     if pd.notna(apt_type) and str(apt_type).strip() and str(apt_type) != 'nan':
-        details_parts.append(f"🏠 {str(apt_type).strip()}")
+        apt_type_escaped = escape_html(str(apt_type).strip())
+        details_parts.append(f"🏠 {apt_type_escaped}")
     if pd.notna(room_cat) and str(room_cat).strip() and str(room_cat) != 'nan':
-        details_parts.append(f"👤 {str(room_cat).strip()}")
+        room_cat_escaped = escape_html(str(room_cat).strip())
+        details_parts.append(f"👤 {room_cat_escaped}")
     if pd.notna(size_sqm) and float(size_sqm) > 0:
         details_parts.append(f"📐 {int(size_sqm)} m²")
     
     if details_parts:
-        card_html += f'<p style="margin: 5px 0; color: #8e44ad; font-size: 13px; font-weight: 500;">{" • ".join(details_parts)}</p>'
+        details_text = " • ".join(details_parts)
+        card_html += f'<p style="margin: 5px 0; color: #8e44ad; font-size: 13px; font-weight: 500;">{details_text}</p>'
     
     if address_text:
         card_html += f'<p style="margin: 5px 0; color: #555; font-size: 14px;">📍 {address_text}</p>'
@@ -616,44 +656,135 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
     
     rent_val = row.get('rent')
     if pd.notna(rent_val) and float(rent_val) > 0:
-        card_html += f'<p style="margin: 8px 0 5px 0; font-size: 18px; font-weight: bold; color: #27ae60;">💰 €{float(rent_val):.0f}/month</p>'
+        rent_formatted = f"{float(rent_val):.0f}"
+        # Use HTML entity for Euro symbol to avoid encoding issues
+        card_html += f'<p style="margin: 8px 0 5px 0; font-size: 18px; font-weight: bold; color: #27ae60;">💰 &euro;{rent_formatted}/month</p>'
     else:
         card_html += '<p style="margin: 8px 0 5px 0; font-size: 14px; color: #999;">💰 Rent: N/A</p>'
     
     card_html += '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">'
     
-    card_html += '<div style="background: #f5f7fa; padding: 10px; border-radius: 5px; margin-top: 8px;">'
-    
-    if pd.notna(row.get('nearest_stop_name')):
-        stop_name = str(row["nearest_stop_name"]).replace('<', '&lt;').replace('>', '&gt;')
-        distance = row.get('nearest_stop_distance_m', 0)
-        if pd.notna(distance) and distance > 0:
-            card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Stop:</strong> {stop_name} <span style="color: #7f8c8d;">({distance:.0f}m)</span></p>'
-        else:
-            card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #2980b9;">🚉 Stop:</strong> {stop_name}</p>'
-    
-    if pd.notna(row.get('walking_time_minutes')) and row['walking_time_minutes'] > 0:
-        card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #16a085;">🚶 To Station:</strong> {row["walking_time_minutes"]:.1f} min</p>'
-    
+    # Commute Time Section
+    card_html += '<div style="background: #f5f7fa; padding: 10px; border-radius: 5px; margin-top: 8px; margin-bottom: 10px;">'
     if pd.notna(row.get('total_commute_minutes')) and row['total_commute_minutes'] > 0:
-        card_html += f'<p style="margin: 8px 0 5px 0; font-size: 15px; font-weight: bold; color: #2980b9; background: #e8f4f8; padding: 6px; border-radius: 4px;">⏱️ Total Commute: {row["total_commute_minutes"]:.1f} min</p>'
+        card_html += f'<p style="margin: 0; font-size: 16px; font-weight: bold; color: #2980b9; background: #e8f4f8; padding: 8px; border-radius: 4px; text-align: center;">⏱️ Commute Time: {row["total_commute_minutes"]:.1f} min</p>'
+    else:
+        card_html += '<p style="margin: 0; font-size: 14px; color: #999; text-align: center;">⏱️ Commute Time: N/A</p>'
+    card_html += '</div>'
     
-    if pd.notna(row.get('transfers')):
-        card_html += f'<p style="margin: 5px 0; font-size: 13px; color: {text_color};"><strong style="color: #c0392b;">🔄 Transfers:</strong> {int(row["transfers"])}</p>'
+    # Walkability Score will be shown at the end
     
-    if pd.notna(row.get('route_details')):
-        try:
-            route_details = json.loads(row['route_details']) if isinstance(row['route_details'], str) else row['route_details']
-            if route_details:
-                for route in route_details:
-                    mode = route.get('mode', 'unknown')
-                    name = str(route.get('name', '')).replace('<', '&lt;').replace('>', '&gt;')
-                    mode_info = TRANSPORT_MODES.get(mode.lower(), {'display': mode.title(), 'color': '#8e44ad'})
-                    card_html += f'<p style="margin: 3px 0; padding: 6px; background: {mode_info["color"]}; color: white; border-radius: 4px; font-size: 12px; font-weight: bold;">{mode_info["display"]} {name}</p>'
-        except:
-            pass
+    # POIs Section
+    card_html += '<div style="background: #ffffff; border: 1px solid #e0e0e0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">'
+    card_html += '<p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: #555;">📍 Nearby Amenities (500m):</p>'
+    
+    poi_items = []
+    if pd.notna(row.get('grocery_stores_500m')) and row['grocery_stores_500m'] > 0:
+        poi_items.append(f'🛒 Grocery: {int(row["grocery_stores_500m"])}')
+    if pd.notna(row.get('cafes_500m')) and row['cafes_500m'] > 0:
+        poi_items.append(f'☕ Cafes: {int(row["cafes_500m"])}')
+    if pd.notna(row.get('restaurants_500m')) and row['restaurants_500m'] > 0:
+        poi_items.append(f'🍽️ Restaurants: {int(row["restaurants_500m"])}')
+    if pd.notna(row.get('gyms_500m')) and row['gyms_500m'] > 0:
+        poi_items.append(f'💪 Gyms: {int(row["gyms_500m"])}')
+    if pd.notna(row.get('pharmacies_500m')) and row['pharmacies_500m'] > 0:
+        poi_items.append(f'💊 Pharmacies: {int(row["pharmacies_500m"])}')
+    if pd.notna(row.get('banks_500m')) and row['banks_500m'] > 0:
+        poi_items.append(f'🏦 Banks: {int(row["banks_500m"])}')
+    if pd.notna(row.get('libraries_500m')) and row['libraries_500m'] > 0:
+        poi_items.append(f'📚 Libraries: {int(row["libraries_500m"])}')
+    if pd.notna(row.get('bars_500m')) and row['bars_500m'] > 0:
+        poi_items.append(f'🍺 Bars: {int(row["bars_500m"])}')
+    
+    if poi_items:
+        card_html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; font-size: 12px; color: #666;">'
+        for item in poi_items[:8]:  # Show max 8 items
+            card_html += f'<p style="margin: 2px 0;">{item}</p>'
+        card_html += '</div>'
+        
+        if pd.notna(row.get('total_pois_500m')) and row['total_pois_500m'] > 0:
+            card_html += f'<p style="margin: 5px 0 0 0; font-size: 11px; color: #999; font-weight: 500;">Total POIs: {int(row["total_pois_500m"])}</p>'
+    else:
+        card_html += '<p style="margin: 0; font-size: 12px; color: #999;">No amenities found nearby</p>'
     
     card_html += '</div>'
+    
+    # Bike Accessibility Section
+    bike_score = row.get('bike_accessibility_score')
+    if pd.notna(bike_score) and bike_score is not None and bike_score > 0:
+        bike_color = '#27ae60' if bike_score >= 50 else '#f39c12' if bike_score >= 30 else '#e74c3c'
+        card_html += f'''
+        <div style="background: #f0f9ff; border-left: 4px solid {bike_color}; 
+                    padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+            <p style="margin: 0 0 5px 0; font-size: 13px; font-weight: 600; color: #555;">🚴 Bike Accessibility:</p>
+            <p style="margin: 0; font-size: 14px; color: {bike_color}; font-weight: bold;">
+                Score: {int(bike_score)}/100
+            </p>
+        '''
+        
+        bike_details = []
+        if pd.notna(row.get('nearest_bike_lane_m')) and row['nearest_bike_lane_m'] is not None:
+            bike_details.append(f'Bike lane: {int(row["nearest_bike_lane_m"])}m')
+        if pd.notna(row.get('nearest_bike_share_m')) and row['nearest_bike_share_m'] is not None:
+            bike_details.append(f'Bike share: {int(row["nearest_bike_share_m"])}m')
+        
+        if bike_details:
+            card_html += f'<p style="margin: 5px 0 0 0; font-size: 11px; color: #666;">{" • ".join(bike_details)}</p>'
+        
+        card_html += '</div>'
+    
+    # Nearest Amenities Section
+    nearest_items = []
+    if pd.notna(row.get('nearest_grocery_m')) and row['nearest_grocery_m'] is not None:
+        nearest_items.append(f'🛒 Grocery: {int(row["nearest_grocery_m"])}m')
+    if pd.notna(row.get('nearest_cafe_m')) and row['nearest_cafe_m'] is not None:
+        nearest_items.append(f'☕ Cafe: {int(row["nearest_cafe_m"])}m')
+    if pd.notna(row.get('nearest_gym_m')) and row['nearest_gym_m'] is not None:
+        nearest_items.append(f'💪 Gym: {int(row["nearest_gym_m"])}m')
+    
+    if nearest_items:
+        card_html += '<div style="background: #fff9e6; padding: 8px; border-radius: 5px; margin-bottom: 10px;">'
+        card_html += '<p style="margin: 0 0 5px 0; font-size: 12px; font-weight: 600; color: #555;">📍 Nearest:</p>'
+        card_html += '<div style="font-size: 11px; color: #666;">'
+        for item in nearest_items:
+            card_html += f'<p style="margin: 2px 0;">{item}</p>'
+        card_html += '</div></div>'
+    
+    # Scores at the end
+    card_html += '<hr style="margin: 15px 0; border: none; border-top: 2px solid #e0e0e0;">'
+    
+    # Walkability Score
+    walkability_score = row.get('walkability_score')
+    if pd.notna(walkability_score) and walkability_score is not None:
+        score_color = '#27ae60' if walkability_score >= 70 else '#f39c12' if walkability_score >= 50 else '#e74c3c'
+        card_html += f'''
+        <div style="background: linear-gradient(135deg, {score_color}15 0%, {score_color}05 100%); 
+                    border-left: 4px solid {score_color}; 
+                    padding: 10px; 
+                    border-radius: 5px; 
+                    margin-bottom: 10px;">
+            <p style="margin: 0; font-size: 15px; font-weight: bold; color: {score_color};">
+                🚶 Walkability Score: <span style="font-size: 18px;">{int(walkability_score)}/100</span>
+            </p>
+        </div>
+        '''
+    
+    # Suitability Score
+    suitability_score = row.get('suitability_score')
+    if pd.notna(suitability_score) and suitability_score is not None:
+        score_color = '#27ae60' if suitability_score >= 70 else '#f39c12' if suitability_score >= 50 else '#e74c3c'
+        card_html += f'''
+        <div style="background: linear-gradient(135deg, {score_color}15 0%, {score_color}05 100%); 
+                    border-left: 4px solid {score_color}; 
+                    padding: 10px; 
+                    border-radius: 5px; 
+                    margin-bottom: 10px;">
+            <p style="margin: 0; font-size: 15px; font-weight: bold; color: {score_color};">
+                ⭐ Suitability Score: <span style="font-size: 18px;">{int(suitability_score)}/100</span>
+            </p>
+        </div>
+        '''
+    
     card_html += '</div>'
     
     return card_html
@@ -808,6 +939,8 @@ def render_area_analysis():
                         st.markdown("---")
                         st.subheader("📊 Research Questions Analysis")
                         
+                        # Original Research Questions
+                        st.markdown("### Original Research Questions")
                         rq_col1, rq_col2 = st.columns(2)
                         with rq_col1:
                             if 'rq1_scatter' in rq_charts:
@@ -819,6 +952,47 @@ def render_area_analysis():
                                 st.pyplot(rq_charts['rq3_scatter'])
                             if 'rq5_bar' in rq_charts:
                                 st.pyplot(rq_charts['rq5_bar'])
+                        
+                        # Walkability & Mobility Research Questions
+                        if any(key.startswith('rq6') or key.startswith('rq7') or key.startswith('rq8') or key.startswith('rq9') or key.startswith('rq10') for key in rq_charts.keys()):
+                            st.markdown("---")
+                            st.markdown("### Walkability & Mobility Research Questions")
+                            
+                            rq_walk_col1, rq_walk_col2 = st.columns(2)
+                            with rq_walk_col1:
+                                if 'rq6_scatter' in rq_charts:
+                                    st.pyplot(rq_charts['rq6_scatter'])
+                                if 'rq8_scatter' in rq_charts:
+                                    st.pyplot(rq_charts['rq8_scatter'])
+                                if 'rq10_bar' in rq_charts:
+                                    st.pyplot(rq_charts['rq10_bar'])
+                            with rq_walk_col2:
+                                if 'rq7_scatter' in rq_charts:
+                                    st.pyplot(rq_charts['rq7_scatter'])
+                                if 'rq9_scatter' in rq_charts:
+                                    st.pyplot(rq_charts['rq9_scatter'])
+                        
+                        # Display research question results
+                        st.markdown("---")
+                        st.markdown("### Research Question Results")
+                        
+                        for rq_key, rq_result in rq_results.items():
+                            if rq_result.get('status') == 'success':
+                                with st.expander(f"📋 {rq_key.replace('_', ' ').title()}"):
+                                    if 'interpretation' in rq_result:
+                                        st.write(rq_result['interpretation'])
+                                    if 'correlation_coefficient' in rq_result:
+                                        st.metric("Correlation", f"{rq_result['correlation_coefficient']:.3f}")
+                                        st.metric("P-value", f"{rq_result['p_value']:.4f}")
+                                        st.metric("Significant", "Yes" if rq_result.get('statistically_significant') else "No")
+                                    if 'r_squared' in rq_result:
+                                        st.metric("R²", f"{rq_result['r_squared']:.3f}")
+                                        st.metric("P-value", f"{rq_result['p_value']:.4f}")
+                                    if 'top_5_districts' in rq_result:
+                                        st.dataframe(pd.DataFrame(rq_result['top_5_districts']))
+                                    if 'gini_coefficient' in rq_result:
+                                        st.metric("Gini Coefficient", f"{rq_result['gini_coefficient']:.3f}")
+                                        st.metric("Equity Level", rq_result.get('equity_level', 'N/A'))
                 except Exception as e:
                     st.warning(f"Could not generate research question charts: {str(e)}")
                 

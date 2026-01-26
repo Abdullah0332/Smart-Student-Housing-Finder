@@ -95,7 +95,7 @@ def add_apartments_to_map(
         marker = folium.CircleMarker(
             location=[lat, lon],
             radius=marker_radius,
-            popup=folium.Popup(popup_text, max_width=400, parse_html=False) if show_popup else None,
+            popup=folium.Popup(popup_text, max_width=450, min_width=300, max_height=650, parse_html=False) if show_popup else None,
             tooltip=html.escape(
                 f"{len(group_df)} room(s) at this location" if len(group_df) > 1
                 else str(group_df.iloc[0].get('provider', 'Room'))
@@ -144,52 +144,152 @@ def _create_colormap(df: pd.DataFrame, color_by: str) -> Optional[folium.LinearC
 
 
 def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
-    popup_text = '<div style="font-family: Arial, sans-serif; max-width: 350px; max-height: 500px; overflow-y: auto;">'
+    popup_text = '<div style="font-family: Arial, sans-serif; max-width: 400px; max-height: 600px; overflow-y: auto;">'
     
     if len(group_df) > 1:
         popup_text += f'<h3 style="margin: 0 0 10px 0; color: #2c3e50;">📍 {len(group_df)} Rooms at This Location</h3>'
     
     for room_idx, (idx, row) in enumerate(group_df.iterrows()):
         if len(group_df) > 1:
-            popup_text += f'<div style="border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px;">'
-            popup_text += f'<h4 style="margin: 0 0 5px 0; color: #3498db;">Room {room_idx + 1}</h4>'
+            popup_text += f'<div style="border-bottom: 2px solid #ddd; padding-bottom: 15px; margin-bottom: 15px;">'
+            popup_text += f'<h4 style="margin: 0 0 8px 0; color: #3498db; font-size: 16px;">Room {room_idx + 1}</h4>'
         
+        # Provider
         if 'provider' in full_df.columns and pd.notna(row.get('provider')):
             provider_escaped = html.escape(str(row['provider']))
-            popup_text += f'<p style="margin: 0 0 5px 0; font-weight: bold; color: #2c3e50;">{provider_escaped}</p>'
+            popup_text += f'<h3 style="margin: 0 0 8px 0; font-weight: bold; color: #2c3e50; font-size: 18px;">{provider_escaped}</h3>'
         
+        # Address
         if 'address' in full_df.columns and pd.notna(row.get('address')):
             address_escaped = html.escape(str(row['address']))
-            popup_text += f'<p style="margin: 0 0 5px 0; color: #7f8c8d; font-size: 11px;"><strong>📍 Address:</strong> {address_escaped}</p>'
+            popup_text += f'<p style="margin: 0 0 8px 0; color: #7f8c8d; font-size: 12px;"><strong>📍 Address:</strong> {address_escaped}</p>'
         
+        # Room Details
+        details_parts = []
+        if 'apartment_type' in full_df.columns and pd.notna(row.get('apartment_type')):
+            details_parts.append(f"🏠 {html.escape(str(row['apartment_type']))}")
+        if 'room_category' in full_df.columns and pd.notna(row.get('room_category')):
+            details_parts.append(f"👤 {html.escape(str(row['room_category']))}")
+        if 'size_sqm' in full_df.columns and pd.notna(row.get('size_sqm')) and float(row['size_sqm']) > 0:
+            details_parts.append(f"📐 {int(row['size_sqm'])} m²")
+        
+        if details_parts:
+            popup_text += f'<p style="margin: 0 0 8px 0; color: #8e44ad; font-size: 12px;">{" • ".join(details_parts)}</p>'
+        
+        # Rent
         if 'rent' in full_df.columns and pd.notna(row.get('rent')):
-            popup_text += f'<p style="margin: 0 0 5px 0;"><strong>💰 Rent:</strong> €{row["rent"]:.0f}/month</p>'
+            popup_text += f'<p style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold; color: #27ae60;"><strong>💰 Rent:</strong> €{row["rent"]:.0f}/month</p>'
         
-        popup_text += '<div style="background: #f8f9fa; padding: 8px; border-radius: 5px; margin: 5px 0;">'
+        popup_text += '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">'
         
-        if 'nearest_stop_name' in full_df.columns and pd.notna(row.get('nearest_stop_name')):
-            stop_name = html.escape(str(row['nearest_stop_name']))
-            distance = row.get('nearest_stop_distance_m', 0)
-            if pd.notna(distance) and distance > 0:
-                popup_text += f'<p style="margin: 0 0 5px 0; font-size: 12px;"><strong>🚉 Nearest Stop:</strong> {stop_name}<br><small style="color: #666;">Distance: {distance:.0f}m</small></p>'
-            else:
-                popup_text += f'<p style="margin: 0 0 5px 0; font-size: 12px;"><strong>🚉 Nearest Stop:</strong> {stop_name}</p>'
-        
-        if 'walking_time_minutes' in full_df.columns and pd.notna(row.get('walking_time_minutes')):
-            popup_text += f'<p style="margin: 0 0 5px 0; font-size: 12px;"><strong>🚶 Walking Time:</strong> {row["walking_time_minutes"]:.1f} min</p>'
-        
+        # Commute Time (keep only total commute, remove nearest stop, walking time, transfers)
         if 'total_commute_minutes' in full_df.columns and pd.notna(row.get('total_commute_minutes')):
-            popup_text += f'<p style="margin: 5px 0; padding: 5px; background: #e3f2fd; border-radius: 3px; font-size: 12px; font-weight: bold;"><strong>⏱️ Total Commute:</strong> {row["total_commute_minutes"]:.1f} min</p>'
+            popup_text += '<div style="background: #e8f4f8; padding: 10px; border-radius: 5px; margin: 8px 0; border-left: 4px solid #2980b9;">'
+            popup_text += f'<p style="margin: 0; padding: 6px; background: #d6eaf8; border-radius: 3px; font-size: 13px; font-weight: bold; color: #2980b9;"><strong>⏱️ Total Commute:</strong> {row["total_commute_minutes"]:.1f} min</p>'
+            popup_text += '</div>'
         
-        if 'transfers' in full_df.columns and pd.notna(row.get('transfers')):
-            popup_text += f'<p style="margin: 0 0 5px 0; font-size: 12px;"><strong>🔄 Transfers:</strong> {int(row["transfers"])}</p>'
+        # POIs Section
+        poi_items = []
+        if 'grocery_stores_500m' in full_df.columns and pd.notna(row.get('grocery_stores_500m')) and row['grocery_stores_500m'] > 0:
+            poi_items.append(f'🛒 Grocery: {int(row["grocery_stores_500m"])}')
+        if 'cafes_500m' in full_df.columns and pd.notna(row.get('cafes_500m')) and row['cafes_500m'] > 0:
+            poi_items.append(f'☕ Cafes: {int(row["cafes_500m"])}')
+        if 'restaurants_500m' in full_df.columns and pd.notna(row.get('restaurants_500m')) and row['restaurants_500m'] > 0:
+            poi_items.append(f'🍽️ Restaurants: {int(row["restaurants_500m"])}')
+        if 'gyms_500m' in full_df.columns and pd.notna(row.get('gyms_500m')) and row['gyms_500m'] > 0:
+            poi_items.append(f'💪 Gyms: {int(row["gyms_500m"])}')
+        if 'pharmacies_500m' in full_df.columns and pd.notna(row.get('pharmacies_500m')) and row['pharmacies_500m'] > 0:
+            poi_items.append(f'💊 Pharmacies: {int(row["pharmacies_500m"])}')
+        if 'banks_500m' in full_df.columns and pd.notna(row.get('banks_500m')) and row['banks_500m'] > 0:
+            poi_items.append(f'🏦 Banks: {int(row["banks_500m"])}')
+        if 'libraries_500m' in full_df.columns and pd.notna(row.get('libraries_500m')) and row['libraries_500m'] > 0:
+            poi_items.append(f'📚 Libraries: {int(row["libraries_500m"])}')
+        if 'bars_500m' in full_df.columns and pd.notna(row.get('bars_500m')) and row['bars_500m'] > 0:
+            poi_items.append(f'🍺 Bars: {int(row["bars_500m"])}')
         
-        popup_text += '</div>'
+        if poi_items:
+            popup_text += '<div style="background: #ffffff; border: 1px solid #e0e0e0; padding: 10px; border-radius: 5px; margin: 8px 0;">'
+            popup_text += '<p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #555;">📍 Nearby Amenities (500m):</p>'
+            popup_text += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; font-size: 10px; color: #666;">'
+            for item in poi_items[:8]:
+                popup_text += f'<p style="margin: 2px 0;">{item}</p>'
+            popup_text += '</div>'
+            if 'total_pois_500m' in full_df.columns and pd.notna(row.get('total_pois_500m')) and row['total_pois_500m'] > 0:
+                popup_text += f'<p style="margin: 5px 0 0 0; font-size: 10px; color: #999; font-weight: 500;">Total POIs: {int(row["total_pois_500m"])}</p>'
+            popup_text += '</div>'
         
+        # Nearest Amenities
+        nearest_items = []
+        if 'nearest_grocery_m' in full_df.columns and pd.notna(row.get('nearest_grocery_m')) and row['nearest_grocery_m'] is not None:
+            nearest_items.append(f'🛒 Grocery: {int(row["nearest_grocery_m"])}m')
+        if 'nearest_cafe_m' in full_df.columns and pd.notna(row.get('nearest_cafe_m')) and row['nearest_cafe_m'] is not None:
+            nearest_items.append(f'☕ Cafe: {int(row["nearest_cafe_m"])}m')
+        if 'nearest_gym_m' in full_df.columns and pd.notna(row.get('nearest_gym_m')) and row['nearest_gym_m'] is not None:
+            nearest_items.append(f'💪 Gym: {int(row["nearest_gym_m"])}m')
+        
+        if nearest_items:
+            popup_text += '<div style="background: #fff9e6; padding: 8px; border-radius: 5px; margin: 8px 0;">'
+            popup_text += '<p style="margin: 0 0 5px 0; font-size: 11px; font-weight: 600; color: #555;">📍 Nearest:</p>'
+            popup_text += '<div style="font-size: 10px; color: #666;">'
+            for item in nearest_items:
+                popup_text += f'<p style="margin: 2px 0;">{item}</p>'
+            popup_text += '</div></div>'
+        
+        # Bike Accessibility
+        if 'bike_accessibility_score' in full_df.columns and pd.notna(row.get('bike_accessibility_score')) and row['bike_accessibility_score'] > 0:
+            bike_score = row['bike_accessibility_score']
+            bike_color = '#27ae60' if bike_score >= 50 else '#f39c12' if bike_score >= 30 else '#e74c3c'
+            popup_text += f'''
+            <div style="background: #f0f9ff; border-left: 4px solid {bike_color}; 
+                        padding: 8px; border-radius: 5px; margin: 8px 0;">
+                <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #555;">🚴 Bike Accessibility:</p>
+                <p style="margin: 0; font-size: 12px; color: {bike_color}; font-weight: bold;">
+                    Score: {int(bike_score)}/100
+                </p>
+            '''
+            bike_details = []
+            if 'nearest_bike_lane_m' in full_df.columns and pd.notna(row.get('nearest_bike_lane_m')) and row['nearest_bike_lane_m'] is not None:
+                bike_details.append(f'Bike lane: {int(row["nearest_bike_lane_m"])}m')
+            if 'nearest_bike_share_m' in full_df.columns and pd.notna(row.get('nearest_bike_share_m')) and row['nearest_bike_share_m'] is not None:
+                bike_details.append(f'Bike share: {int(row["nearest_bike_share_m"])}m')
+            if bike_details:
+                popup_text += f'<p style="margin: 4px 0 0 0; font-size: 10px; color: #666;">{" • ".join(bike_details)}</p>'
+            popup_text += '</div>'
+        
+        # Scores at the end
+        popup_text += '<hr style="margin: 15px 0; border: none; border-top: 2px solid #e0e0e0;">'
+        
+        # Walkability Score
+        if 'walkability_score' in full_df.columns and pd.notna(row.get('walkability_score')):
+            walk_score = row['walkability_score']
+            score_color = '#27ae60' if walk_score >= 70 else '#f39c12' if walk_score >= 50 else '#e74c3c'
+            popup_text += f'''
+            <div style="background: linear-gradient(135deg, {score_color}15 0%, {score_color}05 100%); 
+                        border-left: 4px solid {score_color}; 
+                        padding: 10px; 
+                        border-radius: 5px; 
+                        margin: 8px 0;">
+                <p style="margin: 0; font-weight: bold; color: {score_color}; font-size: 13px;">
+                    🚶 Walkability Score: <span style="font-size: 16px;">{int(walk_score)}/100</span>
+                </p>
+            </div>
+            '''
+        
+        # Suitability Score
         if 'suitability_score' in full_df.columns and pd.notna(row.get('suitability_score')):
             score = row['suitability_score']
             score_color = '#27ae60' if score >= 70 else '#f39c12' if score >= 50 else '#e74c3c'
-            popup_text += f'<p style="margin: 5px 0 0 0; font-size: 12px;"><strong>⭐ Score:</strong> <span style="color: {score_color}; font-weight: bold;">{score:.1f}/100</span></p>'
+            popup_text += f'''
+            <div style="background: linear-gradient(135deg, {score_color}15 0%, {score_color}05 100%); 
+                        border-left: 4px solid {score_color}; 
+                        padding: 10px; 
+                        border-radius: 5px; 
+                        margin: 8px 0;">
+                <p style="margin: 0; font-size: 13px; font-weight: bold; color: {score_color};">
+                    ⭐ Suitability Score: <span style="font-size: 16px;">{int(score)}/100</span>
+                </p>
+            </div>
+            '''
         
         if len(group_df) > 1:
             popup_text += "</div>"

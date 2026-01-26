@@ -143,13 +143,36 @@ def aggregate_transport_metrics(df: pd.DataFrame) -> pd.DataFrame:
         
         unique_modes = len(set(transport_modes_list)) if transport_modes_list else 0
         
+        # Walkability and mobility metrics
+        walkability_scores = pd.to_numeric(district_df.get('walkability_score', pd.Series()), errors='coerce')
+        valid_walkability = walkability_scores[walkability_scores.notna() & (walkability_scores >= 0)]
+        
+        poi_densities = pd.to_numeric(district_df.get('total_pois_500m', pd.Series()), errors='coerce')
+        valid_pois = poi_densities[poi_densities.notna() & (poi_densities >= 0)]
+        
+        bike_scores = pd.to_numeric(district_df.get('bike_accessibility_score', pd.Series()), errors='coerce')
+        valid_bike = bike_scores[bike_scores.notna() & (bike_scores >= 0)]
+        
+        grocery_counts = pd.to_numeric(district_df.get('grocery_stores_500m', pd.Series()), errors='coerce')
+        valid_grocery = grocery_counts[grocery_counts.notna() & (grocery_counts >= 0)]
+        
+        cafe_counts = pd.to_numeric(district_df.get('cafes_500m', pd.Series()), errors='coerce')
+        valid_cafes = cafe_counts[cafe_counts.notna() & (cafe_counts >= 0)]
+        
         metrics = {
             'district': district,
             'avg_walking_distance_m': valid_walking.mean() if len(valid_walking) > 0 else None,
             'avg_commute_minutes': valid_commute.mean() if len(valid_commute) > 0 else None,
             'avg_transfers': valid_transfers.mean() if len(valid_transfers) > 0 else None,
             'transport_mode_diversity': unique_modes,
-            'rooms_with_transport_data': len(district_df[district_df['total_commute_minutes'].notna()])
+            'rooms_with_transport_data': len(district_df[district_df['total_commute_minutes'].notna()]),
+            # Walkability and mobility metrics
+            'avg_walkability_score': valid_walkability.mean() if len(valid_walkability) > 0 else None,
+            'avg_poi_density': valid_pois.mean() if len(valid_pois) > 0 else None,
+            'avg_bike_accessibility_score': valid_bike.mean() if len(valid_bike) > 0 else None,
+            'avg_grocery_stores_500m': valid_grocery.mean() if len(valid_grocery) > 0 else None,
+            'avg_cafes_500m': valid_cafes.mean() if len(valid_cafes) > 0 else None,
+            'rooms_with_walkability_data': len(district_df[district_df['walkability_score'].notna()]) if 'walkability_score' in district_df.columns else 0
         }
         transport_metrics.append(metrics)
     
@@ -179,12 +202,29 @@ def calculate_student_area_score(
     merged['walking_score'] = _normalize_inverse(merged, 'avg_walking_distance_m')
     merged['availability_score'] = _normalize_direct(merged, 'total_rooms')
     
-    merged['student_area_score'] = (
-        merged['affordability_score'].fillna(0) * rent_weight +
-        merged['commute_score'].fillna(0) * commute_weight +
-        merged['walking_score'].fillna(0) * walking_weight +
-        merged['availability_score'].fillna(0) * availability_weight
-    )
+    # Add walkability score if available (use direct normalization since higher is better)
+    if 'avg_walkability_score' in merged.columns:
+        merged['walkability_score'] = _normalize_direct(merged, 'avg_walkability_score')
+        # Include walkability in the score (reduce other weights proportionally)
+        total_weight = rent_weight + commute_weight + walking_weight + availability_weight
+        walkability_weight = 0.1  # 10% weight for walkability
+        adjusted_total = total_weight + walkability_weight
+        
+        merged['student_area_score'] = (
+            merged['affordability_score'].fillna(0) * (rent_weight / adjusted_total) +
+            merged['commute_score'].fillna(0) * (commute_weight / adjusted_total) +
+            merged['walking_score'].fillna(0) * (walking_weight / adjusted_total) +
+            merged['availability_score'].fillna(0) * (availability_weight / adjusted_total) +
+            merged['walkability_score'].fillna(0) * (walkability_weight / adjusted_total)
+        )
+    else:
+        # Original calculation without walkability
+        merged['student_area_score'] = (
+            merged['affordability_score'].fillna(0) * rent_weight +
+            merged['commute_score'].fillna(0) * commute_weight +
+            merged['walking_score'].fillna(0) * walking_weight +
+            merged['availability_score'].fillna(0) * availability_weight
+        )
     
     merged = merged.sort_values('student_area_score', ascending=False)
     return merged
