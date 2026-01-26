@@ -391,6 +391,8 @@ def render_provider_filter(df: pd.DataFrame) -> pd.DataFrame:
     st.markdown("---")
     st.subheader("🔍 Filter by Platform/Provider")
     
+    st.info("📊 Showing apartments with rent between €250 - €1200/month")
+    
     if 'selected_providers' not in st.session_state or len(st.session_state.selected_providers) == 0:
         st.session_state.selected_providers = all_providers
     
@@ -412,7 +414,7 @@ def render_provider_filter(df: pd.DataFrame) -> pd.DataFrame:
     
     if len(selected_providers) > 0:
         df = df[df['provider'].isin(selected_providers)].copy()
-        st.success(f"✓ Filtered to {len(df)} rooms from {len(selected_providers)} platform(s)")
+        st.success(f"✓ Showing {len(df)} rooms from {len(selected_providers)} platform(s)")
     else:
         st.info("ℹ️ No providers selected. Showing all rooms.")
     
@@ -422,14 +424,18 @@ def render_provider_filter(df: pd.DataFrame) -> pd.DataFrame:
 def render_sorting(df: pd.DataFrame) -> pd.DataFrame:
     sort_option = st.selectbox(
         "Sort by:",
-        ['Rent (Low to High)', 'Rent (High to Low)', 'Distance (Near to Far)', 
-         'Distance (Far to Near)', 'Commute Time (Short to Long)', 'Commute Time (Long to Short)'],
+        ['Rent (Low to High)', 'Rent (High to Low)', 
+         'Size (Small to Large)', 'Size (Large to Small)',
+         'Commute Time (Short to Long)', 'Commute Time (Long to Short)',
+         'Distance (Near to Far)', 'Distance (Far to Near)'],
         key="sort_option"
     )
     
     sort_configs = {
         'Rent (Low to High)': ('rent', True),
         'Rent (High to Low)': ('rent', False),
+        'Size (Small to Large)': ('size_sqm', True),
+        'Size (Large to Small)': ('size_sqm', False),
         'Distance (Near to Far)': ('nearest_stop_distance_m', True),
         'Distance (Far to Near)': ('nearest_stop_distance_m', False),
         'Commute Time (Short to Long)': ('total_commute_minutes', True),
@@ -502,18 +508,61 @@ def render_map(df: pd.DataFrame):
 
 
 def render_room_cards(df: pd.DataFrame):
-    rooms_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; padding: 10px 0;">'
+    if 'provider' not in df.columns or df['provider'].isna().all():
+        rooms_html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; padding: 10px 0;">'
+        for idx, row in df.iterrows():
+            rooms_html += build_room_card_html(idx, row, show_provider=True)
+        rooms_html += '</div>'
+        rooms_html += get_click_script()
+        st.markdown(rooms_html, unsafe_allow_html=True)
+        return
     
-    for idx, row in df.iterrows():
-        rooms_html += build_room_card_html(idx, row)
+    grouped = df.groupby('provider', sort=True)
+    rooms_html = ''
     
-    rooms_html += '</div>'
+    provider_colors = [
+        {'bg': '#e8f4f8', 'border': '#2980b9', 'text': '#2980b9'},
+        {'bg': '#f0f9ff', 'border': '#0ea5e9', 'text': '#0369a1'},
+        {'bg': '#fef3c7', 'border': '#f59e0b', 'text': '#d97706'},
+        {'bg': '#f3e8ff', 'border': '#9333ea', 'text': '#7e22ce'},
+        {'bg': '#d1fae5', 'border': '#10b981', 'text': '#059669'},
+        {'bg': '#fee2e2', 'border': '#ef4444', 'text': '#dc2626'},
+        {'bg': '#fce7f3', 'border': '#ec4899', 'text': '#db2777'},
+        {'bg': '#e0e7ff', 'border': '#6366f1', 'text': '#4f46e5'},
+    ]
+    
+    for provider_idx, (provider_name, provider_df) in enumerate(grouped):
+        color_scheme = provider_colors[provider_idx % len(provider_colors)]
+        room_count = len(provider_df)
+        
+        provider_display = str(provider_name).replace('<', '&lt;').replace('>', '&gt;')
+        
+        rooms_html += f'''
+        <div style="margin-bottom: 40px;">
+            <div style="background: linear-gradient(135deg, {color_scheme['bg']} 0%, {color_scheme['bg']}dd 100%); 
+                        border-left: 5px solid {color_scheme['border']}; 
+                        padding: 15px 20px; 
+                        margin-bottom: 20px; 
+                        border-radius: 8px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <h3 style="margin: 0; color: {color_scheme['text']}; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px;">
+                    <span style="background: {color_scheme['border']}; color: white; padding: 5px 12px; border-radius: 20px; font-size: 14px; font-weight: 600;">{room_count}</span>
+                    {provider_display}
+                </h3>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; padding: 0 10px;">
+        '''
+        
+        for idx, row in provider_df.iterrows():
+            rooms_html += build_room_card_html(idx, row, show_provider=False)
+        
+        rooms_html += '</div></div>'
+    
     rooms_html += get_click_script()
-    
     st.markdown(rooms_html, unsafe_allow_html=True)
 
 
-def build_room_card_html(idx, row) -> str:
+def build_room_card_html(idx, row, show_provider: bool = True) -> str:
     has_coords = pd.notna(row.get('latitude')) and pd.notna(row.get('longitude'))
     
     bg_color = '#ffffff' if has_coords else '#fffbf0'
@@ -530,7 +579,34 @@ def build_room_card_html(idx, row) -> str:
     
     card_html = f'<div id="{room_id}" class="room-card-clickable" style="border: 2px solid {border_color}; border-radius: 8px; padding: 15px; background-color: {bg_color}; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">'
     
-    card_html += f'<h4 style="margin-top: 0; color: {text_color}; margin-bottom: 10px; font-weight: 600;">{provider_name}</h4>'
+    apt_type = row.get('apartment_type')
+    room_cat = row.get('room_category')
+    size_sqm = row.get('size_sqm')
+    
+    if show_provider:
+        card_html += f'<h4 style="margin-top: 0; color: {text_color}; margin-bottom: 10px; font-weight: 600;">{provider_name}</h4>'
+    else:
+        apartment_title = ""
+        if pd.notna(apt_type) and str(apt_type).strip() and str(apt_type) != 'nan':
+            apartment_title = str(apt_type).strip()
+        if not apartment_title and pd.notna(room_cat) and str(room_cat).strip() and str(room_cat) != 'nan':
+            apartment_title = str(room_cat).strip()
+        if not apartment_title:
+            apartment_title = f"Apartment #{idx + 1}"
+        
+        apartment_title = apartment_title.replace('<', '&lt;').replace('>', '&gt;')
+        card_html += f'<h4 style="margin-top: 0; color: {text_color}; margin-bottom: 10px; font-weight: 600;">{apartment_title}</h4>'
+    
+    details_parts = []
+    if pd.notna(apt_type) and str(apt_type).strip() and str(apt_type) != 'nan':
+        details_parts.append(f"🏠 {str(apt_type).strip()}")
+    if pd.notna(room_cat) and str(room_cat).strip() and str(room_cat) != 'nan':
+        details_parts.append(f"👤 {str(room_cat).strip()}")
+    if pd.notna(size_sqm) and float(size_sqm) > 0:
+        details_parts.append(f"📐 {int(size_sqm)} m²")
+    
+    if details_parts:
+        card_html += f'<p style="margin: 5px 0; color: #8e44ad; font-size: 13px; font-weight: 500;">{" • ".join(details_parts)}</p>'
     
     if address_text:
         card_html += f'<p style="margin: 5px 0; color: #555; font-size: 14px;">📍 {address_text}</p>'

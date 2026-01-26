@@ -14,7 +14,9 @@ def load_accommodation_data(
     file_path: str,
     city_filter: str = 'Berlin',
     limit: Optional[int] = None,
-    provider_filter: Optional[str] = None
+    provider_filter: Optional[str] = None,
+    min_rent: float = 250,
+    max_rent: float = 1200
 ) -> pd.DataFrame:
     try:
         if file_path.endswith('.csv'):
@@ -31,6 +33,11 @@ def load_accommodation_data(
         df = _clean_rent_column(df)
         df = _clean_address_column(df)
         df = _filter_by_provider(df, provider_filter)
+        
+        if 'rent' in df.columns:
+            before_count = len(df)
+            df = df[(df['rent'] >= min_rent) & (df['rent'] <= max_rent)]
+            print(f"✓ Filtered rent €{min_rent}-€{max_rent}: {before_count} → {len(df)} rooms")
         
         if limit is not None and limit > 0:
             df = df.head(limit)
@@ -83,7 +90,30 @@ def _map_columns(df: pd.DataFrame) -> pd.DataFrame:
             column_mapping[col] = 'provider'
             break
     
-    return df.rename(columns=column_mapping)
+    for col in df.columns:
+        col_lower = col.lower()
+        if col_lower == 'size' or 'size' in col_lower or 'sqm' in col_lower or 'qm' in col_lower:
+            column_mapping[col] = 'size_sqm'
+            break
+    
+    for col in df.columns:
+        col_lower = col.lower()
+        if 'name of apartment' in col_lower or 'apartment name' in col_lower or 'room type' in col_lower:
+            column_mapping[col] = 'apartment_type'
+            break
+    
+    for col in df.columns:
+        col_lower = col.lower()
+        if 'room category' in col_lower or 'category' in col_lower or 'person' in col_lower:
+            column_mapping[col] = 'room_category'
+            break
+    
+    df = df.rename(columns=column_mapping)
+    
+    if 'size_sqm' in df.columns:
+        df['size_sqm'] = pd.to_numeric(df['size_sqm'], errors='coerce')
+    
+    return df
 
 
 def _clean_rent_column(df: pd.DataFrame) -> pd.DataFrame:

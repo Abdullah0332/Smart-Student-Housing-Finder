@@ -18,9 +18,7 @@ def create_base_map(center: Tuple[float, float], zoom_start: int = None) -> foli
     
     m = folium.Map(location=center, zoom_start=zoom_start, tiles='OpenStreetMap')
     
-    folium.TileLayer('CartoDB positron', name='CartoDB Positron', overlay=False).add_to(m)
-    folium.TileLayer('CartoDB dark_matter', name='CartoDB Dark Matter', overlay=False).add_to(m)
-    folium.LayerControl(collapsed=False).add_to(m)
+    folium.LayerControl(collapsed=True).add_to(m)
     
     return m
 
