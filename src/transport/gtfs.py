@@ -31,7 +31,6 @@ def get_transport_mode_from_route_type(route_type: int) -> str:
     Maps GTFS route_type to transport mode using official GTFS specification.
     Uses live GTFS data instead of hardcoded route name detection.
     """
-    # Standard GTFS route_type values (0-12)
     standard_map = {
         0: 'tram',
         1: 'subway',
@@ -45,23 +44,20 @@ def get_transport_mode_from_route_type(route_type: int) -> str:
         12: 'monorail'
     }
     
-    # Extended route_type values (100+) used by some agencies
-    # Based on GTFS Extended Route Types
     extended_map = {
-        100: 'rail',  # Railway service
-        106: 'rail',  # Regional rail
-        109: 'rail',  # Inter-regional rail
-        400: 'subway',  # Metro/Subway
-        700: 'bus',  # Bus service
-        900: 'tram',  # Tram service
-        1000: 'rail'  # Railway service
+        100: 'rail',
+        106: 'rail',
+        109: 'rail',
+        400: 'subway',
+        700: 'bus',
+        900: 'tram',
+        1000: 'rail'
     }
     
-    # Check extended types first, then standard types
     if route_type in extended_map:
         return extended_map[route_type]
     
-    return standard_map.get(route_type, 'bus')  # Default to bus if unknown
+    return standard_map.get(route_type, 'bus')
 
 
 def load_gtfs_stops() -> Optional[pd.DataFrame]:
@@ -144,7 +140,6 @@ def _parse_gtfs_time(time_str: str) -> Optional[float]:
         minutes = int(parts[1])
         seconds = int(parts[2])
         
-        # Convert to total minutes (handles times > 24 hours)
         total_minutes = hours * 60 + minutes + seconds / 60.0
         return total_minutes
     except (ValueError, IndexError):
@@ -161,9 +156,7 @@ def _calculate_trip_duration_minutes(from_stop_time: str, to_stop_time: str) -> 
     if from_minutes is None or to_minutes is None:
         return None
     
-    # Handle day rollover (e.g., 23:50 -> 00:10 next day)
     if to_minutes < from_minutes:
-        # Assume next day (add 24 hours = 1440 minutes)
         to_minutes += 1440
     
     duration = to_minutes - from_minutes
@@ -282,13 +275,11 @@ def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
             route_name = route_name.strip()
             mode = get_transport_mode_from_route_type(route_type)
             
-            # Extract all GTFS route fields (live data)
             route_color = str(route.get('route_color', '')).strip() if pd.notna(route.get('route_color')) and str(route.get('route_color', '')).strip() else None
             route_text_color = str(route.get('route_text_color', '')).strip() if pd.notna(route.get('route_text_color')) and str(route.get('route_text_color', '')).strip() else None
             route_long_name = str(route.get('route_long_name', '')).strip() if pd.notna(route.get('route_long_name')) and str(route.get('route_long_name', '')).strip() and str(route.get('route_long_name', '')).strip() != 'nan' else None
             route_desc = str(route.get('route_desc', '')).strip() if pd.notna(route.get('route_desc')) and str(route.get('route_desc', '')).strip() and str(route.get('route_desc', '')).strip() != 'nan' else None
             
-            # Format colors with # prefix if missing
             if route_color and not route_color.startswith('#'):
                 route_color = f'#{route_color}'
             if route_text_color and not route_text_color.startswith('#'):
@@ -297,12 +288,12 @@ def get_routes_at_stop(stop_id: str, max_routes: int = 5) -> List[Dict]:
             route_info.append({
                 'route_id': route_id,
                 'name': route_name,
-                'long_name': route_long_name,  # Full route name from GTFS
-                'description': route_desc,  # Route description from GTFS
+                'long_name': route_long_name,
+                'description': route_desc,
                 'mode': mode,
                 'route_type': route_type,
-                'color': route_color,  # Official route color from GTFS
-                'text_color': route_text_color  # Text color from GTFS
+                'color': route_color,
+                'text_color': route_text_color
             })
             seen_routes.add(route_id)
             
@@ -335,7 +326,6 @@ def find_route_between_stops(from_stop_id: str, to_stop_id: str) -> Optional[Dic
     if len(from_stops) == 0 or len(to_stops) == 0:
         return None
     
-    # Find matching trips and calculate actual durations
     best_trip = None
     best_duration = None
     
@@ -349,17 +339,13 @@ def find_route_between_stops(from_stop_id: str, to_stop_id: str) -> Optional[Dic
         from_seq = trip_from['stop_sequence'].values[0]
         to_seq = trip_to['stop_sequence'].values[0]
         
-        # Check if this trip goes from stop A to stop B (sequence must increase)
         if from_seq < to_seq:
-            # Get actual scheduled times
             from_departure = trip_from['departure_time'].values[0]
             to_arrival = trip_to['arrival_time'].values[0]
             
-            # Calculate actual trip duration
             duration = _calculate_trip_duration_minutes(from_departure, to_arrival)
             
             if duration is not None:
-                # Prefer shorter trips (faster routes)
                 if best_duration is None or duration < best_duration:
                     best_trip = trip_id
                     best_duration = duration
@@ -389,13 +375,11 @@ def find_route_between_stops(from_stop_id: str, to_stop_id: str) -> Optional[Dic
     route_name = route_name.strip()
     mode = get_transport_mode_from_route_type(route_type)
     
-    # Extract all GTFS route fields (live data)
     route_color = str(route.get('route_color', '')).strip() if pd.notna(route.get('route_color')) and str(route.get('route_color', '')).strip() else None
     route_text_color = str(route.get('route_text_color', '')).strip() if pd.notna(route.get('route_text_color')) and str(route.get('route_text_color', '')).strip() else None
     route_long_name = str(route.get('route_long_name', '')).strip() if pd.notna(route.get('route_long_name')) and str(route.get('route_long_name', '')).strip() and str(route.get('route_long_name', '')).strip() != 'nan' else None
     route_desc = str(route.get('route_desc', '')).strip() if pd.notna(route.get('route_desc')) and str(route.get('route_desc', '')).strip() and str(route.get('route_desc', '')).strip() != 'nan' else None
     
-    # Format colors with # prefix if missing
     if route_color and not route_color.startswith('#'):
         route_color = f'#{route_color}'
     if route_text_color and not route_text_color.startswith('#'):
@@ -404,13 +388,13 @@ def find_route_between_stops(from_stop_id: str, to_stop_id: str) -> Optional[Dic
     return {
         'route_id': route_id,
         'name': route_name,
-        'long_name': route_long_name,  # Full route name from GTFS
-        'description': route_desc,  # Route description from GTFS
+        'long_name': route_long_name,
+        'description': route_desc,
         'mode': mode,
         'route_type': route_type,
-        'color': route_color,  # Official route color from GTFS
-        'text_color': route_text_color,  # Text color from GTFS
-        'trip_duration_minutes': best_duration  # ACTUAL scheduled trip time from GTFS
+        'color': route_color,
+        'text_color': route_text_color,
+        'trip_duration_minutes': best_duration
     }
 
 
@@ -543,12 +527,10 @@ def get_gtfs_commute_info(
         else:
             modes = ['public_transport']
     
-    # Use ACTUAL scheduled trip time from GTFS if available, otherwise fallback to estimate
     actual_transit_minutes = None
     if route_info and route_info.get('trip_duration_minutes') is not None:
         actual_transit_minutes = route_info['trip_duration_minutes']
     
-    # Fallback to estimated time if no actual trip time found
     if actual_transit_minutes is None:
         stop_to_stop_distance = haversine_distance(
             from_stop['latitude'], from_stop['longitude'],
@@ -559,7 +541,6 @@ def get_gtfs_commute_info(
         transfer_penalty = transfers * TRANSPORT['transfer_penalty_minutes']
         estimated_transit_minutes = base_transit_minutes + transfer_penalty
     else:
-        # Use actual trip time + transfer penalty
         transfer_penalty = transfers * TRANSPORT['transfer_penalty_minutes']
         estimated_transit_minutes = actual_transit_minutes + transfer_penalty
     

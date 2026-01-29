@@ -154,17 +154,14 @@ def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
             popup_text += f'<div style="border-bottom: 2px solid #ddd; padding-bottom: 15px; margin-bottom: 15px;">'
             popup_text += f'<h4 style="margin: 0 0 8px 0; color: #3498db; font-size: 16px;">Room {room_idx + 1}</h4>'
         
-        # Provider
         if 'provider' in full_df.columns and pd.notna(row.get('provider')):
             provider_escaped = html.escape(str(row['provider']))
             popup_text += f'<h3 style="margin: 0 0 8px 0; font-weight: bold; color: #2c3e50; font-size: 18px;">{provider_escaped}</h3>'
         
-        # Address
         if 'address' in full_df.columns and pd.notna(row.get('address')):
             address_escaped = html.escape(str(row['address']))
             popup_text += f'<p style="margin: 0 0 8px 0; color: #7f8c8d; font-size: 12px;"><strong>📍 Address:</strong> {address_escaped}</p>'
         
-        # Room Details
         details_parts = []
         if 'apartment_type' in full_df.columns and pd.notna(row.get('apartment_type')):
             details_parts.append(f"🏠 {html.escape(str(row['apartment_type']))}")
@@ -176,19 +173,16 @@ def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
         if details_parts:
             popup_text += f'<p style="margin: 0 0 8px 0; color: #8e44ad; font-size: 12px;">{" • ".join(details_parts)}</p>'
         
-        # Rent
         if 'rent' in full_df.columns and pd.notna(row.get('rent')):
             popup_text += f'<p style="margin: 0 0 10px 0; font-size: 16px; font-weight: bold; color: #27ae60;"><strong>💰 Rent:</strong> €{row["rent"]:.0f}/month</p>'
         
         popup_text += '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">'
         
-        # Commute Time (keep only total commute, remove nearest stop, walking time, transfers)
         if 'total_commute_minutes' in full_df.columns and pd.notna(row.get('total_commute_minutes')):
             popup_text += '<div style="background: #e8f4f8; padding: 10px; border-radius: 5px; margin: 8px 0; border-left: 4px solid #2980b9;">'
             popup_text += f'<p style="margin: 0; padding: 6px; background: #d6eaf8; border-radius: 3px; font-size: 13px; font-weight: bold; color: #2980b9;"><strong>⏱️ Total Commute:</strong> {row["total_commute_minutes"]:.1f} min</p>'
             popup_text += '</div>'
         
-        # POIs Section
         poi_items = []
         if 'grocery_stores_500m' in full_df.columns and pd.notna(row.get('grocery_stores_500m')) and row['grocery_stores_500m'] > 0:
             poi_items.append(f'🛒 Grocery: {int(row["grocery_stores_500m"])}')
@@ -218,7 +212,6 @@ def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
                 popup_text += f'<p style="margin: 5px 0 0 0; font-size: 10px; color: #999; font-weight: 500;">Total POIs: {int(row["total_pois_500m"])}</p>'
             popup_text += '</div>'
         
-        # Nearest Amenities
         nearest_items = []
         if 'nearest_grocery_m' in full_df.columns and pd.notna(row.get('nearest_grocery_m')) and row['nearest_grocery_m'] is not None:
             nearest_items.append(f'🛒 Grocery: {int(row["nearest_grocery_m"])}m')
@@ -235,7 +228,6 @@ def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
                 popup_text += f'<p style="margin: 2px 0;">{item}</p>'
             popup_text += '</div></div>'
         
-        # Bike Accessibility
         if 'bike_accessibility_score' in full_df.columns and pd.notna(row.get('bike_accessibility_score')) and row['bike_accessibility_score'] > 0:
             bike_score = row['bike_accessibility_score']
             bike_color = '#27ae60' if bike_score >= 50 else '#f39c12' if bike_score >= 30 else '#e74c3c'
@@ -256,10 +248,8 @@ def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
                 popup_text += f'<p style="margin: 4px 0 0 0; font-size: 10px; color: #666;">{" • ".join(bike_details)}</p>'
             popup_text += '</div>'
         
-        # Scores at the end
         popup_text += '<hr style="margin: 15px 0; border: none; border-top: 2px solid #e0e0e0;">'
         
-        # Walkability Score
         if 'walkability_score' in full_df.columns and pd.notna(row.get('walkability_score')):
             walk_score = row['walkability_score']
             score_color = '#27ae60' if walk_score >= 70 else '#f39c12' if walk_score >= 50 else '#e74c3c'
@@ -275,7 +265,6 @@ def _build_popup_html(group_df: pd.DataFrame, full_df: pd.DataFrame) -> str:
             </div>
             '''
         
-        # Suitability Score
         if 'suitability_score' in full_df.columns and pd.notna(row.get('suitability_score')):
             score = row['suitability_score']
             score_color = '#27ae60' if score >= 70 else '#f39c12' if score >= 50 else '#e74c3c'

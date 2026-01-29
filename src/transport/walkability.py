@@ -59,7 +59,6 @@ def get_pois_within_radius(
     if poi_types is None:
         poi_types = ['supermarket', 'restaurant', 'cafe', 'gym', 'pharmacy', 'bank', 'library', 'bar']
     
-    # Overpass QL query
     query = f"""
     [out:json][timeout:25];
     (
@@ -111,7 +110,6 @@ def get_pois_within_radius(
     
     elements = result['elements']
     
-    # Categorize POIs
     grocery_stores = []
     restaurants = []
     cafes = []
@@ -123,7 +121,6 @@ def get_pois_within_radius(
     
     for element in elements:
         if 'lat' not in element or 'lon' not in element:
-            # For ways/relations, use center point if available
             if 'center' in element:
                 lat = element['center']['lat']
                 lon = element['center']['lon']
@@ -153,7 +150,6 @@ def get_pois_within_radius(
         elif tags.get('amenity') == 'bar':
             bars.append(distance)
     
-    # Calculate nearest distances
     nearest_grocery = min(grocery_stores) if grocery_stores else None
     nearest_cafe = min(cafes) if cafes else None
     nearest_gym = min(gyms) if gyms else None
@@ -195,7 +191,6 @@ def get_bike_infrastructure(
     Returns:
         Dictionary with bike infrastructure metrics
     """
-    # Query for bike lanes and cycleways
     query = f"""
     [out:json][timeout:25];
     (
@@ -250,7 +245,6 @@ def get_bike_infrastructure(
     nearest_bike_lane = min(bike_lanes) if bike_lanes else None
     nearest_bike_share = min(bike_share_stations) if bike_share_stations else None
     
-    # Calculate bike accessibility score (0-100)
     bike_score = 0
     if nearest_bike_lane:
         if nearest_bike_lane <= 100:
@@ -304,7 +298,6 @@ def calculate_walkability_score(
     score = 0
     max_score = 100
     
-    # POI Density Score (40 points max)
     total_pois = poi_data.get('total_pois_500m', 0)
     if total_pois >= 20:
         poi_score = 40
@@ -321,7 +314,6 @@ def calculate_walkability_score(
     
     score += poi_score
     
-    # Essential Services Score (30 points max)
     essential_score = 0
     if poi_data.get('grocery_stores_500m', 0) >= 2:
         essential_score += 10
@@ -341,7 +333,6 @@ def calculate_walkability_score(
     
     score += essential_score
     
-    # Transit Accessibility Score (20 points max)
     if walking_distance_to_stop:
         if walking_distance_to_stop <= 200:
             transit_score = 20
@@ -355,11 +346,9 @@ def calculate_walkability_score(
             transit_score = 0
         score += transit_score
     
-    # Bike Accessibility Score (10 points max)
-    bike_score = bike_data.get('bike_accessibility_score', 0) / 10  # Convert 0-100 to 0-10
+    bike_score = bike_data.get('bike_accessibility_score', 0) / 10
     score += bike_score
     
-    # Ensure score is between 0-100
     score = min(100, max(0, score))
     
     return {
@@ -389,24 +378,18 @@ def get_walkability_mobility_info(
     Returns:
         Complete walkability and mobility metrics dictionary
     """
-    # Rate limiting
     time.sleep(delay)
     
-    # Get POI data
     poi_data = get_pois_within_radius(latitude, longitude, radius_m=500)
     
-    # Rate limiting
     time.sleep(delay)
     
-    # Get bike infrastructure
     bike_data = get_bike_infrastructure(latitude, longitude, radius_m=1000)
     
-    # Calculate walkability score
     walkability = calculate_walkability_score(
         latitude, longitude, poi_data, bike_data, walking_distance_to_stop
     )
     
-    # Combine all data
     result = {
         **poi_data,
         **bike_data,
@@ -429,7 +412,6 @@ def batch_get_walkability_info(
         delay: Delay between API calls (rate limiting)
         progress_callback: Optional callback function(processed, total)
     """
-    # Initialize columns
     walkability_columns = [
         'grocery_stores_500m', 'restaurants_500m', 'cafes_500m', 'gyms_500m',
         'pharmacies_500m', 'banks_500m', 'libraries_500m', 'bars_500m',
@@ -463,7 +445,6 @@ def batch_get_walkability_info(
                 delay=delay
             )
             
-            # Update DataFrame
             for key, value in walkability_info.items():
                 if key in apartments_df.columns:
                     apartments_df.at[idx, key] = value

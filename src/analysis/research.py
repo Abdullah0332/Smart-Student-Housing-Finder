@@ -131,7 +131,6 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
     rents = pd.to_numeric(analysis_df['rent'], errors='coerce')
     commutes = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
     
-    # Remove NaN values first
     valid_mask = rents.notna() & commutes.notna()
     rents_clean = rents[valid_mask]
     commutes_clean = commutes[valid_mask]
@@ -139,7 +138,6 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
     if len(rents_clean) < 10:
         return {'status': 'insufficient_data', 'message': 'Need at least 10 valid data points after cleaning'}
     
-    # Remove outliers
     rent_mean, rent_std = rents_clean.mean(), rents_clean.std()
     commute_mean, commute_std = commutes_clean.mean(), commutes_clean.std()
     
@@ -155,7 +153,6 @@ def analyze_rq1_affordability_vs_accessibility(df: pd.DataFrame) -> Dict:
         rents_clean = rents[rents.notna() & commutes.notna()]
         commutes_clean = commutes[rents.notna() & commutes.notna()]
     
-    # Ensure numeric arrays
     rents_clean = rents_clean.values.astype(float)
     commutes_clean = commutes_clean.values.astype(float)
     
@@ -217,11 +214,9 @@ def analyze_rq3_walking_vs_availability(df: pd.DataFrame) -> Dict:
         if len(analysis_df) < 5:
             return {'status': 'insufficient_data', 'message': 'Need at least 5 districts with data'}
         
-        # Ensure numeric types
         walking = pd.to_numeric(analysis_df['avg_walking_distance_m'], errors='coerce').values
         rooms = pd.to_numeric(analysis_df['total_rooms'], errors='coerce').values
         
-        # Remove NaN values
         valid_mask = ~(np.isnan(walking) | np.isnan(rooms))
         walking = walking[valid_mask].astype(float)
         rooms = rooms[valid_mask].astype(float)
@@ -264,7 +259,6 @@ def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
     
     analysis_df['commute'] = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
     
-    # Remove NaN values
     analysis_df = analysis_df[analysis_df['commute'].notna()].copy()
     
     platform_counts = analysis_df['provider'].value_counts()
@@ -278,7 +272,6 @@ def analyze_rq4_platform_differences(df: pd.DataFrame) -> Dict:
     platform_groups = []
     for platform in valid_platforms:
         platform_data = analysis_df[analysis_df['provider'] == platform]['commute'].values
-        # Ensure numeric and remove NaN
         platform_data = pd.to_numeric(platform_data, errors='coerce')
         platform_data = platform_data[~np.isnan(platform_data)].astype(float)
         if len(platform_data) > 0:
@@ -360,7 +353,6 @@ def analyze_rq6_walkability_vs_rent(df: pd.DataFrame) -> Dict:
     rents = pd.to_numeric(analysis_df['rent'], errors='coerce')
     walkability = pd.to_numeric(analysis_df['walkability_score'], errors='coerce')
     
-    # Remove NaN values
     valid_mask = rents.notna() & walkability.notna()
     rents_clean = rents[valid_mask]
     walkability_clean = walkability[valid_mask]
@@ -368,7 +360,6 @@ def analyze_rq6_walkability_vs_rent(df: pd.DataFrame) -> Dict:
     if len(rents_clean) < 10:
         return {'status': 'insufficient_data', 'message': 'Need at least 10 valid data points after cleaning'}
     
-    # Remove outliers
     rent_mean, rent_std = rents_clean.mean(), rents_clean.std()
     walk_mean, walk_std = walkability_clean.mean(), walkability_clean.std()
     
@@ -384,7 +375,6 @@ def analyze_rq6_walkability_vs_rent(df: pd.DataFrame) -> Dict:
         rents_clean = rents[rents.notna() & walkability.notna()]
         walkability_clean = walkability[rents.notna() & walkability.notna()]
     
-    # Ensure numeric arrays
     rents_clean = rents_clean.values.astype(float)
     walkability_clean = walkability_clean.values.astype(float)
     
@@ -423,7 +413,6 @@ def analyze_rq7_walkability_vs_commute(df: pd.DataFrame) -> Dict:
     walkability = pd.to_numeric(analysis_df['walkability_score'], errors='coerce')
     commutes = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
     
-    # Remove NaN values and ensure numeric
     valid_mask = walkability.notna() & commutes.notna()
     walkability_clean = walkability[valid_mask].values.astype(float)
     commutes_clean = commutes[valid_mask].values.astype(float)
@@ -471,11 +460,9 @@ def analyze_rq8_poi_vs_availability(df: pd.DataFrame) -> Dict:
         if len(analysis_df) < 5:
             return {'status': 'insufficient_data', 'message': 'Need at least 5 districts with POI data'}
         
-        # Ensure numeric types
         poi_density = pd.to_numeric(analysis_df['avg_poi_density'], errors='coerce').values
         rooms = pd.to_numeric(analysis_df['total_rooms'], errors='coerce').values
         
-        # Remove NaN values
         valid_mask = ~(np.isnan(poi_density) | np.isnan(rooms))
         poi_density = poi_density[valid_mask].astype(float)
         rooms = rooms[valid_mask].astype(float)
@@ -521,7 +508,6 @@ def analyze_rq9_bike_vs_walkability(df: pd.DataFrame) -> Dict:
     bike_scores = pd.to_numeric(analysis_df['bike_accessibility_score'], errors='coerce')
     walkability = pd.to_numeric(analysis_df['walkability_score'], errors='coerce')
     
-    # Remove NaN values and ensure numeric
     valid_mask = bike_scores.notna() & walkability.notna()
     bike_scores_clean = bike_scores[valid_mask].values.astype(float)
     walkability_clean = walkability[valid_mask].values.astype(float)
@@ -566,12 +552,10 @@ def analyze_rq10_multimodal_mobility(df: pd.DataFrame) -> Dict:
         if len(analysis_df) < 3:
             return {'status': 'insufficient_data', 'message': 'Need at least 3 districts with mobility data'}
         
-        # Ensure numeric types
         analysis_df['avg_walkability_score'] = pd.to_numeric(analysis_df['avg_walkability_score'], errors='coerce')
         analysis_df['avg_bike_accessibility_score'] = pd.to_numeric(analysis_df['avg_bike_accessibility_score'], errors='coerce')
         analysis_df['avg_commute_minutes'] = pd.to_numeric(analysis_df['avg_commute_minutes'], errors='coerce')
         
-        # Normalize scores (0-1)
         def normalize_score(series):
             series_clean = pd.to_numeric(series, errors='coerce')
             valid = series_clean.dropna()
@@ -583,7 +567,6 @@ def analyze_rq10_multimodal_mobility(df: pd.DataFrame) -> Dict:
                 return ((series_clean - min_val) / (max_val - min_val)).fillna(0.0)
             return pd.Series(0.5, index=series.index, dtype=float)
         
-        # Inverse normalize commute (shorter is better)
         def normalize_commute(series):
             series_clean = pd.to_numeric(series, errors='coerce')
             valid = series_clean.dropna()
@@ -599,14 +582,12 @@ def analyze_rq10_multimodal_mobility(df: pd.DataFrame) -> Dict:
         analysis_df['bike_normalized'] = normalize_score(analysis_df['avg_bike_accessibility_score'])
         analysis_df['commute_normalized'] = normalize_commute(analysis_df['avg_commute_minutes'])
         
-        # Composite multi-modal mobility score (equal weights)
         analysis_df['multimodal_score'] = (
             analysis_df['walkability_normalized'].fillna(0) * 0.4 +
             analysis_df['bike_normalized'].fillna(0) * 0.3 +
             analysis_df['commute_normalized'].fillna(0) * 0.3
         ) * 100
         
-        # Ensure multimodal_score is numeric
         analysis_df['multimodal_score'] = pd.to_numeric(analysis_df['multimodal_score'], errors='coerce')
         
         analysis_df = analysis_df.sort_values('multimodal_score', ascending=False)
@@ -614,7 +595,6 @@ def analyze_rq10_multimodal_mobility(df: pd.DataFrame) -> Dict:
         top_5_df = analysis_df.head(5)[['district', 'multimodal_score', 'avg_walkability_score', 
                                          'avg_bike_accessibility_score', 'avg_commute_minutes']].copy()
         
-        # Ensure all numeric columns are properly converted
         top_5_df['multimodal_score'] = pd.to_numeric(top_5_df['multimodal_score'], errors='coerce')
         top_5_df['avg_walkability_score'] = pd.to_numeric(top_5_df['avg_walkability_score'], errors='coerce')
         top_5_df['avg_bike_accessibility_score'] = pd.to_numeric(top_5_df['avg_bike_accessibility_score'], errors='coerce')
@@ -657,7 +637,6 @@ def analyze_rq11_amenities_vs_walkability(df: pd.DataFrame) -> Dict:
     grocery = pd.to_numeric(analysis_df['grocery_stores_500m'], errors='coerce')
     cafes = pd.to_numeric(analysis_df['cafes_500m'], errors='coerce')
     
-    # Remove NaN values
     valid_mask = walkability.notna() & grocery.notna() & cafes.notna()
     walkability_clean = walkability[valid_mask].values.astype(float)
     grocery_clean = grocery[valid_mask].values.astype(float)
@@ -666,7 +645,6 @@ def analyze_rq11_amenities_vs_walkability(df: pd.DataFrame) -> Dict:
     if len(walkability_clean) < 10:
         return {'status': 'insufficient_data', 'message': 'Need at least 10 valid data points after cleaning'}
     
-    # Multiple regression using numpy
     X = np.column_stack([grocery_clean, cafes_clean, np.ones(len(grocery_clean))])
     y = walkability_clean
     
@@ -705,7 +683,6 @@ def analyze_rq12_bike_vs_commute(df: pd.DataFrame) -> Dict:
     bike_scores = pd.to_numeric(analysis_df['bike_accessibility_score'], errors='coerce')
     commutes = pd.to_numeric(analysis_df['total_commute_minutes'], errors='coerce')
     
-    # Remove NaN values and ensure numeric
     valid_mask = bike_scores.notna() & commutes.notna()
     bike_scores_clean = bike_scores[valid_mask].values.astype(float)
     commutes_clean = commutes[valid_mask].values.astype(float)
@@ -752,7 +729,6 @@ def analyze_rq13_walkability_by_district(df: pd.DataFrame) -> Dict:
         walkability_scores = pd.to_numeric(analysis_df['avg_walkability_score'], errors='coerce')
         districts = analysis_df['district'].values
         
-        # Remove NaN
         valid_mask = ~np.isnan(walkability_scores)
         walkability_scores = walkability_scores[valid_mask].astype(float)
         districts = districts[valid_mask]
@@ -760,13 +736,11 @@ def analyze_rq13_walkability_by_district(df: pd.DataFrame) -> Dict:
         if len(walkability_scores) < 3:
             return {'status': 'insufficient_data', 'message': 'Need at least 3 valid districts after cleaning'}
         
-        # Calculate statistics
         mean_score = float(np.mean(walkability_scores))
         std_score = float(np.std(walkability_scores))
         min_score = float(np.min(walkability_scores))
         max_score = float(np.max(walkability_scores))
         
-        # Find top and bottom districts
         top_district_idx = np.argmax(walkability_scores)
         bottom_district_idx = np.argmin(walkability_scores)
         
@@ -801,7 +775,6 @@ def analyze_rq14_poi_density_vs_walkability(df: pd.DataFrame) -> Dict:
     poi_density = pd.to_numeric(analysis_df['total_pois_500m'], errors='coerce')
     walkability = pd.to_numeric(analysis_df['walkability_score'], errors='coerce')
     
-    # Remove NaN values and ensure numeric
     valid_mask = poi_density.notna() & walkability.notna()
     poi_density_clean = poi_density[valid_mask].values.astype(float)
     walkability_clean = walkability[valid_mask].values.astype(float)
@@ -849,11 +822,9 @@ def analyze_rq15_essential_services_vs_availability(df: pd.DataFrame) -> Dict:
         if len(analysis_df) < 5:
             return {'status': 'insufficient_data', 'message': 'Need at least 5 districts with essential service data'}
         
-        # Ensure numeric types
         grocery = pd.to_numeric(analysis_df['avg_grocery_stores_500m'], errors='coerce').values
         rooms = pd.to_numeric(analysis_df['total_rooms'], errors='coerce').values
         
-        # Remove NaN
         valid_mask = ~(np.isnan(grocery) | np.isnan(rooms))
         grocery = grocery[valid_mask].astype(float)
         rooms = rooms[valid_mask].astype(float)
@@ -898,7 +869,6 @@ def analyze_rq16_bike_vs_rent(df: pd.DataFrame) -> Dict:
     rents = pd.to_numeric(analysis_df['rent'], errors='coerce')
     bike_scores = pd.to_numeric(analysis_df['bike_accessibility_score'], errors='coerce')
     
-    # Remove NaN values
     valid_mask = rents.notna() & bike_scores.notna()
     rents_clean = rents[valid_mask]
     bike_scores_clean = bike_scores[valid_mask]
@@ -906,7 +876,6 @@ def analyze_rq16_bike_vs_rent(df: pd.DataFrame) -> Dict:
     if len(rents_clean) < 10:
         return {'status': 'insufficient_data', 'message': 'Need at least 10 valid data points after cleaning'}
     
-    # Remove outliers
     rent_mean, rent_std = rents_clean.mean(), rents_clean.std()
     bike_mean, bike_std = bike_scores_clean.mean(), bike_scores_clean.std()
     
@@ -922,7 +891,6 @@ def analyze_rq16_bike_vs_rent(df: pd.DataFrame) -> Dict:
         rents_clean = rents[rents.notna() & bike_scores.notna()]
         bike_scores_clean = bike_scores[rents.notna() & bike_scores.notna()]
     
-    # Ensure numeric arrays
     rents_clean = rents_clean.values.astype(float)
     bike_scores_clean = bike_scores_clean.values.astype(float)
     
@@ -961,7 +929,6 @@ def analyze_rq17_walkability_vs_transfers(df: pd.DataFrame) -> Dict:
     walkability = pd.to_numeric(analysis_df['walkability_score'], errors='coerce')
     transfers = pd.to_numeric(analysis_df['transfers'], errors='coerce')
     
-    # Remove NaN values and ensure numeric
     valid_mask = walkability.notna() & transfers.notna()
     walkability_clean = walkability[valid_mask].values.astype(float)
     transfers_clean = transfers[valid_mask].values.astype(float)
@@ -1010,11 +977,9 @@ def analyze_rq18_walkability_affordability_ratio(df: pd.DataFrame) -> Dict:
         if len(analysis_df) < 3:
             return {'status': 'insufficient_data', 'message': 'Need at least 3 districts with walkability and rent data'}
         
-        # Ensure numeric types
         walkability = pd.to_numeric(analysis_df['avg_walkability_score'], errors='coerce')
         rent = pd.to_numeric(analysis_df['avg_rent'], errors='coerce')
         
-        # Remove NaN
         valid_mask = walkability.notna() & rent.notna()
         walkability = walkability[valid_mask]
         rent = rent[valid_mask]
@@ -1023,7 +988,6 @@ def analyze_rq18_walkability_affordability_ratio(df: pd.DataFrame) -> Dict:
         if len(walkability) < 3:
             return {'status': 'insufficient_data', 'message': 'Need at least 3 valid districts after cleaning'}
         
-        # Calculate walkability-to-rent ratio (walkability per euro)
         ratio = (walkability.values / rent.values).astype(float)
         analysis_df = analysis_df.copy()
         analysis_df['walkability_rent_ratio'] = ratio
@@ -1032,7 +996,6 @@ def analyze_rq18_walkability_affordability_ratio(df: pd.DataFrame) -> Dict:
         
         top_5 = analysis_df.head(5)[['district', 'walkability_rent_ratio', 'avg_walkability_score', 'avg_rent']].copy()
         
-        # Ensure all numeric columns are properly converted
         top_5['walkability_rent_ratio'] = pd.to_numeric(top_5['walkability_rent_ratio'], errors='coerce')
         top_5['avg_walkability_score'] = pd.to_numeric(top_5['avg_walkability_score'], errors='coerce')
         top_5['avg_rent'] = pd.to_numeric(top_5['avg_rent'], errors='coerce')

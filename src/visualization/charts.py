@@ -142,78 +142,20 @@ def _create_district_map(df: pd.DataFrame) -> folium.Map:
 
 
 def create_research_question_charts(rq_results: Dict, df: pd.DataFrame) -> Dict:
+    """Only RQ1–RQ5 charts."""
     charts = {}
-    
     rq1 = rq_results.get('RQ1_affordability_vs_accessibility', {})
     if rq1.get('status') == 'success':
         charts['rq1_scatter'] = _create_rq1_scatter(df)
-    
     rq3 = rq_results.get('RQ3_walking_vs_availability', {})
     if rq3.get('status') == 'success':
         charts['rq3_scatter'] = _create_rq3_scatter(df)
-    
     rq4 = rq_results.get('RQ4_platform_differences', {})
     if rq4.get('status') == 'success':
         charts['rq4_bar'] = _create_rq4_bar(rq4)
-    
     rq5 = rq_results.get('RQ5_spatial_equity', {})
     if rq5.get('status') == 'success':
         charts['rq5_bar'] = _create_rq5_bar(df)
-    
-    # New walkability/mobility research questions
-    rq6 = rq_results.get('RQ6_walkability_vs_rent', {})
-    if rq6.get('status') == 'success':
-        charts['rq6_scatter'] = _create_rq6_scatter(df)
-    
-    rq7 = rq_results.get('RQ7_walkability_vs_commute', {})
-    if rq7.get('status') == 'success':
-        charts['rq7_scatter'] = _create_rq7_scatter(df)
-    
-    rq8 = rq_results.get('RQ8_poi_vs_availability', {})
-    if rq8.get('status') == 'success':
-        charts['rq8_scatter'] = _create_rq8_scatter(df)
-    
-    rq9 = rq_results.get('RQ9_bike_vs_walkability', {})
-    if rq9.get('status') == 'success':
-        charts['rq9_scatter'] = _create_rq9_scatter(df)
-    
-    rq10 = rq_results.get('RQ10_multimodal_mobility', {})
-    if rq10.get('status') == 'success':
-        charts['rq10_bar'] = _create_rq10_bar(rq10)
-    
-    # Additional mobility and walkability research questions
-    rq11 = rq_results.get('RQ11_amenities_vs_walkability', {})
-    if rq11.get('status') == 'success':
-        charts['rq11_scatter'] = _create_rq11_scatter(df)
-    
-    rq12 = rq_results.get('RQ12_bike_vs_commute', {})
-    if rq12.get('status') == 'success':
-        charts['rq12_scatter'] = _create_rq12_scatter(df)
-    
-    rq13 = rq_results.get('RQ13_walkability_by_district', {})
-    if rq13.get('status') == 'success':
-        charts['rq13_bar'] = _create_rq13_bar(rq13, df)
-    
-    rq14 = rq_results.get('RQ14_poi_density_vs_walkability', {})
-    if rq14.get('status') == 'success':
-        charts['rq14_scatter'] = _create_rq14_scatter(df)
-    
-    rq15 = rq_results.get('RQ15_essential_services_vs_availability', {})
-    if rq15.get('status') == 'success':
-        charts['rq15_scatter'] = _create_rq15_scatter(df)
-    
-    rq16 = rq_results.get('RQ16_bike_vs_rent', {})
-    if rq16.get('status') == 'success':
-        charts['rq16_scatter'] = _create_rq16_scatter(df)
-    
-    rq17 = rq_results.get('RQ17_walkability_vs_transfers', {})
-    if rq17.get('status') == 'success':
-        charts['rq17_scatter'] = _create_rq17_scatter(df)
-    
-    rq18 = rq_results.get('RQ18_walkability_affordability_ratio', {})
-    if rq18.get('status') == 'success':
-        charts['rq18_bar'] = _create_rq18_bar(rq18)
-    
     return charts
 
 
@@ -231,11 +173,9 @@ def _create_rq1_scatter(df: pd.DataFrame) -> plt.Figure:
         ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
         return fig
     
-    # Ensure numeric types
     commutes = pd.to_numeric(plot_df['total_commute_minutes'], errors='coerce').values
     rents = pd.to_numeric(plot_df['rent'], errors='coerce').values
     
-    # Remove NaN
     valid_mask = ~(np.isnan(commutes) | np.isnan(rents))
     commutes = commutes[valid_mask]
     rents = rents[valid_mask]
@@ -283,11 +223,9 @@ def _create_rq3_scatter(df: pd.DataFrame) -> plt.Figure:
         ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
         return fig
     
-    # Ensure numeric types
     walking = pd.to_numeric(plot_df['avg_walking_distance_m'], errors='coerce').values
     rooms = pd.to_numeric(plot_df['total_rooms'], errors='coerce').values
     
-    # Remove NaN
     valid_mask = ~(np.isnan(walking) | np.isnan(rooms))
     walking = walking[valid_mask]
     rooms = rooms[valid_mask]
@@ -354,569 +292,138 @@ def _create_rq5_bar(df: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def _create_rq6_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ6: Walkability vs Rent"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['rent'].notna() &
-        df['walkability_score'].notna() &
-        (pd.to_numeric(df['rent'], errors='coerce') > 0) &
-        (pd.to_numeric(df['walkability_score'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    walkability = pd.to_numeric(plot_df['walkability_score'], errors='coerce').values
-    rents = pd.to_numeric(plot_df['rent'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(walkability) | np.isnan(rents))
-    walkability = walkability[valid_mask]
-    rents = rents[valid_mask]
-    
-    if len(walkability) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(walkability, rents, alpha=0.5, s=30, c='green')
-    
-    z = np.polyfit(walkability, rents, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(walkability.min(), walkability.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Walkability Score (0-100)')
-    ax.set_ylabel('Rent (€/month)')
-    ax.set_title('RQ6: Relationship between Walkability and Rent')
-    ax.legend()
-    
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq7_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ7: Walkability vs Commute Time"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['walkability_score'].notna() &
-        df['total_commute_minutes'].notna() &
-        (pd.to_numeric(df['walkability_score'], errors='coerce') >= 0) &
-        (pd.to_numeric(df['total_commute_minutes'], errors='coerce') > 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    walkability = pd.to_numeric(plot_df['walkability_score'], errors='coerce').values
-    commutes = pd.to_numeric(plot_df['total_commute_minutes'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(walkability) | np.isnan(commutes))
-    walkability = walkability[valid_mask]
-    commutes = commutes[valid_mask]
-    
-    if len(walkability) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(walkability, commutes, alpha=0.5, s=30, c='purple')
-    
-    z = np.polyfit(walkability, commutes, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(walkability.min(), walkability.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Walkability Score (0-100)')
-    ax.set_ylabel('Commute Time (minutes)')
-    ax.set_title('RQ7: Relationship between Walkability and Commute Time')
-    ax.legend()
-    
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq8_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ8: POI Density vs Room Availability"""
-    from ..analysis.area import aggregate_housing_metrics, aggregate_transport_metrics
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    housing = aggregate_housing_metrics(df)
-    transport = aggregate_transport_metrics(df)
-    
-    if len(housing) == 0 or len(transport) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    merged = pd.merge(housing, transport, on='district', how='inner')
-    plot_df = merged[
-        merged['avg_poi_density'].notna() & 
-        merged['total_rooms'].notna() &
-        (pd.to_numeric(merged['avg_poi_density'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    poi_density = pd.to_numeric(plot_df['avg_poi_density'], errors='coerce').values
-    rooms = pd.to_numeric(plot_df['total_rooms'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(poi_density) | np.isnan(rooms))
-    poi_density = poi_density[valid_mask]
-    rooms = rooms[valid_mask]
-    plot_df_valid = plot_df.iloc[valid_mask]
-    
-    if len(poi_density) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(poi_density, rooms, s=100, c='orange', alpha=0.7)
-    
-    for idx, row in plot_df_valid.iterrows():
-        ax.annotate(row['district'][:10], (row['avg_poi_density'], row['total_rooms']), fontsize=8)
-    
-    z = np.polyfit(poi_density, rooms, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(poi_density.min(), poi_density.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Average POI Density (500m radius)')
-    ax.set_ylabel('Number of Available Rooms')
-    ax.set_title('RQ8: POI Density vs Room Availability by District')
-    ax.legend()
-    
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq9_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ9: Bike Accessibility vs Walkability"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['bike_accessibility_score'].notna() &
-        df['walkability_score'].notna() &
-        (pd.to_numeric(df['bike_accessibility_score'], errors='coerce') >= 0) &
-        (pd.to_numeric(df['walkability_score'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    bike_scores = pd.to_numeric(plot_df['bike_accessibility_score'], errors='coerce').values
-    walkability = pd.to_numeric(plot_df['walkability_score'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(bike_scores) | np.isnan(walkability))
-    bike_scores = bike_scores[valid_mask]
-    walkability = walkability[valid_mask]
-    
-    if len(bike_scores) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(bike_scores, walkability, alpha=0.5, s=30, c='teal')
-    
-    z = np.polyfit(bike_scores, walkability, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(bike_scores.min(), bike_scores.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Bike Accessibility Score (0-100)')
-    ax.set_ylabel('Walkability Score (0-100)')
-    ax.set_title('RQ9: Relationship between Bike Accessibility and Walkability')
-    ax.legend()
-    
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq10_bar(rq10_results: Dict) -> plt.Figure:
-    """RQ10: Multi-Modal Mobility by District"""
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    top_5 = rq10_results.get('top_5_districts', [])
-    if not top_5:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    districts = [d['district'] for d in top_5]
-    scores = [float(d.get('multimodal_score', 0)) for d in top_5]
-    
-    # Ensure scores are valid numbers
-    scores = np.array([s for s in scores if not np.isnan(s) and s >= 0])
-    districts = [districts[i] for i in range(len(districts)) if i < len(scores)]
-    
-    if len(scores) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    max_score = max(scores) if len(scores) > 0 else 100
-    colors = plt.cm.RdYlGn(scores / max_score) if max_score > 0 else plt.cm.RdYlGn([0.5] * len(scores))
-    ax.barh(districts, scores, color=colors, alpha=0.7)
-    ax.set_xlabel('Multi-Modal Mobility Score (0-100)')
-    ax.set_title('RQ10: Top 5 Districts by Multi-Modal Mobility')
-    ax.set_xlim(0, 100)
-    
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq11_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ11: Amenities vs Walkability"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['walkability_score'].notna() &
-        df['grocery_stores_500m'].notna() &
-        df['cafes_500m'].notna() &
-        (pd.to_numeric(df['walkability_score'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    walkability = pd.to_numeric(plot_df['walkability_score'], errors='coerce').values
-    grocery = pd.to_numeric(plot_df['grocery_stores_500m'], errors='coerce').values
-    cafes = pd.to_numeric(plot_df['cafes_500m'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(walkability) | np.isnan(grocery) | np.isnan(cafes))
-    walkability = walkability[valid_mask]
-    grocery = grocery[valid_mask]
-    cafes = cafes[valid_mask]
-    
-    if len(walkability) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Create combined amenity score
-    amenity_score = grocery + cafes
-    
-    ax.scatter(amenity_score, walkability, alpha=0.5, s=30, c='coral')
-    
-    z = np.polyfit(amenity_score, walkability, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(amenity_score.min(), amenity_score.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Combined Amenities (Grocery Stores + Cafes)')
-    ax.set_ylabel('Walkability Score')
-    ax.set_title('RQ11: Relationship between Amenities and Walkability')
-    ax.legend()
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq12_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ12: Bike Accessibility vs Commute Time"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['bike_accessibility_score'].notna() &
-        df['total_commute_minutes'].notna() &
-        (pd.to_numeric(df['bike_accessibility_score'], errors='coerce') >= 0) &
-        (pd.to_numeric(df['total_commute_minutes'], errors='coerce') > 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    bike_scores = pd.to_numeric(plot_df['bike_accessibility_score'], errors='coerce').values
-    commutes = pd.to_numeric(plot_df['total_commute_minutes'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(bike_scores) | np.isnan(commutes))
-    bike_scores = bike_scores[valid_mask]
-    commutes = commutes[valid_mask]
-    
-    if len(bike_scores) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(bike_scores, commutes, alpha=0.5, s=30, c='cyan')
-    
-    z = np.polyfit(bike_scores, commutes, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(bike_scores.min(), bike_scores.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Bike Accessibility Score')
-    ax.set_ylabel('Commute Time (minutes)')
-    ax.set_title('RQ12: Relationship between Bike Infrastructure and Commute Time')
-    ax.legend()
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq13_bar(rq13_results: Dict, df: pd.DataFrame) -> plt.Figure:
-    """RQ13: Walkability by District"""
+def create_five_walkability_mobility_charts(df: pd.DataFrame) -> Dict[str, plt.Figure]:
+    """Create exactly 5 charts on Walkability–Mobility relationship (POI, transit, commute, bike, districts)."""
     from ..analysis.area import aggregate_transport_metrics
-    
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    transport_metrics = aggregate_transport_metrics(df)
-    plot_df = transport_metrics[
-        transport_metrics['avg_walkability_score'].notna() &
-        (pd.to_numeric(transport_metrics['avg_walkability_score'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    walkability = pd.to_numeric(plot_df['avg_walkability_score'], errors='coerce').values
-    districts = plot_df['district'].values
-    
-    # Remove NaN
-    valid_mask = ~np.isnan(walkability)
-    walkability = walkability[valid_mask]
-    districts = districts[valid_mask]
-    plot_df = plot_df.iloc[valid_mask]
-    
-    if len(walkability) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Sort by walkability
-    sorted_idx = np.argsort(walkability)
-    districts_sorted = districts[sorted_idx]
-    walkability_sorted = walkability[sorted_idx]
-    
-    colors = plt.cm.viridis(walkability_sorted / walkability_sorted.max() if walkability_sorted.max() > 0 else 0.5)
-    ax.barh(districts_sorted, walkability_sorted, color=colors, alpha=0.7)
-    ax.set_xlabel('Average Walkability Score')
-    ax.set_title('RQ13: Walkability Variation Across Berlin Districts')
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq14_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ14: POI Density vs Walkability"""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['total_pois_500m'].notna() &
-        df['walkability_score'].notna() &
-        (pd.to_numeric(df['total_pois_500m'], errors='coerce') >= 0) &
-        (pd.to_numeric(df['walkability_score'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    poi_density = pd.to_numeric(plot_df['total_pois_500m'], errors='coerce').values
-    walkability = pd.to_numeric(plot_df['walkability_score'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(poi_density) | np.isnan(walkability))
-    poi_density = poi_density[valid_mask]
-    walkability = walkability[valid_mask]
-    
-    if len(poi_density) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(poi_density, walkability, alpha=0.5, s=30, c='magenta')
-    
-    z = np.polyfit(poi_density, walkability, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(poi_density.min(), poi_density.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('POI Density (total POIs within 500m)')
-    ax.set_ylabel('Walkability Score')
-    ax.set_title('RQ14: Relationship between POI Density and Walkability')
-    ax.legend()
-    plt.tight_layout()
-    return fig
-
-
-def _create_rq15_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ15: Essential Services vs Room Availability"""
-    from ..analysis.area import aggregate_housing_metrics, aggregate_transport_metrics
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    housing = aggregate_housing_metrics(df)
+    charts = {}
     transport = aggregate_transport_metrics(df)
-    
-    if len(housing) == 0 or len(transport) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    merged = pd.merge(housing, transport, on='district', how='inner')
-    plot_df = merged[
-        merged['avg_grocery_stores_500m'].notna() & 
-        merged['total_rooms'].notna() &
-        (pd.to_numeric(merged['avg_grocery_stores_500m'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
-        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    # Ensure numeric types
-    grocery = pd.to_numeric(plot_df['avg_grocery_stores_500m'], errors='coerce').values
-    rooms = pd.to_numeric(plot_df['total_rooms'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(grocery) | np.isnan(rooms))
-    grocery = grocery[valid_mask]
-    rooms = rooms[valid_mask]
-    plot_df_valid = plot_df.iloc[valid_mask]
-    
-    if len(grocery) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(grocery, rooms, s=100, c='orange', alpha=0.7)
-    
-    for idx, row in plot_df_valid.iterrows():
-        ax.annotate(row['district'][:10], (row['avg_grocery_stores_500m'], row['total_rooms']), fontsize=8)
-    
-    z = np.polyfit(grocery, rooms, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(grocery.min(), grocery.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Average Grocery Stores within 500m')
-    ax.set_ylabel('Total Rooms Available')
-    ax.set_title('RQ15: Essential Services vs Room Availability')
-    ax.legend()
-    plt.tight_layout()
-    return fig
+
+    f1 = _wm_poi_vs_walkability(df)
+    if f1 is not None:
+        charts['wm_1_poi_vs_walkability'] = f1
+    f2 = _wm_transit_vs_walkability(df)
+    if f2 is not None:
+        charts['wm_2_transit_vs_walkability'] = f2
+    f3 = _wm_walkability_vs_commute(df)
+    if f3 is not None:
+        charts['wm_3_walkability_vs_commute'] = f3
+    f4 = _wm_bike_vs_walkability(df)
+    if f4 is not None:
+        charts['wm_4_bike_vs_walkability'] = f4
+    f5 = _wm_district_walkability_commute(transport)
+    if f5 is not None:
+        charts['wm_5_district_walkability_commute'] = f5
+    return charts
 
 
-def _create_rq16_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ16: Bike Accessibility vs Rent"""
+def _wm_poi_vs_walkability(df: pd.DataFrame) -> Optional[plt.Figure]:
+    """Graph 1: POI count (500 m) vs Walkability. More POIs → higher walkability."""
     fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['rent'].notna() &
-        df['bike_accessibility_score'].notna() &
-        (pd.to_numeric(df['rent'], errors='coerce') > 0) &
-        (pd.to_numeric(df['bike_accessibility_score'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
+    d = df[df['total_pois_500m'].notna() & df['walkability_score'].notna()].copy()
+    d['poi'] = pd.to_numeric(d['total_pois_500m'], errors='coerce')
+    d['walk'] = pd.to_numeric(d['walkability_score'], errors='coerce')
+    d = d.dropna(subset=['poi', 'walk'])
+    if len(d) < 5:
         ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
         return fig
-    
-    # Ensure numeric types
-    bike_scores = pd.to_numeric(plot_df['bike_accessibility_score'], errors='coerce').values
-    rents = pd.to_numeric(plot_df['rent'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(bike_scores) | np.isnan(rents))
-    bike_scores = bike_scores[valid_mask]
-    rents = rents[valid_mask]
-    
-    if len(bike_scores) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    ax.scatter(bike_scores, rents, alpha=0.5, s=30, c='lime')
-    
-    z = np.polyfit(bike_scores, rents, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(bike_scores.min(), bike_scores.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Bike Accessibility Score')
-    ax.set_ylabel('Rent (€/month)')
-    ax.set_title('RQ16: Relationship between Bike Accessibility and Rent')
+    ax.scatter(d['poi'], d['walk'], alpha=0.5, s=30, c='#3498db')
+    z = np.polyfit(d['poi'], d['walk'], 1)
+    xl = np.linspace(d['poi'].min(), d['poi'].max(), 100)
+    ax.plot(xl, np.poly1d(z)(xl), 'r--', alpha=0.8, label='Trend')
+    ax.set_xlabel('POI count within 500 m')
+    ax.set_ylabel('Walkability score (0–100)')
+    ax.set_title('1. POI vs Walkability — More amenities → higher walkability')
     ax.legend()
+    ax.set_xlim(left=0)
     plt.tight_layout()
     return fig
 
 
-def _create_rq17_scatter(df: pd.DataFrame) -> plt.Figure:
-    """RQ17: Walkability vs Transfers"""
+def _wm_transit_vs_walkability(df: pd.DataFrame) -> Optional[plt.Figure]:
+    """Graph 2: Walking distance to transit vs Walkability. Closer to transit → higher walkability."""
     fig, ax = plt.subplots(figsize=(10, 6))
-    
-    plot_df = df[
-        df['walkability_score'].notna() &
-        df['transfers'].notna() &
-        (pd.to_numeric(df['walkability_score'], errors='coerce') >= 0) &
-        (pd.to_numeric(df['transfers'], errors='coerce') >= 0)
-    ].copy()
-    
-    if len(plot_df) == 0:
+    d = df[df['nearest_stop_distance_m'].notna() & df['walkability_score'].notna()].copy()
+    d['dist'] = pd.to_numeric(d['nearest_stop_distance_m'], errors='coerce')
+    d['walk'] = pd.to_numeric(d['walkability_score'], errors='coerce')
+    d = d[(d['dist'] > 0) & d['walk'].notna()].dropna(subset=['dist', 'walk'])
+    if len(d) < 5:
         ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
         return fig
-    
-    # Ensure numeric types
-    walkability = pd.to_numeric(plot_df['walkability_score'], errors='coerce').values
-    transfers = pd.to_numeric(plot_df['transfers'], errors='coerce').values
-    
-    # Remove NaN
-    valid_mask = ~(np.isnan(walkability) | np.isnan(transfers))
-    walkability = walkability[valid_mask]
-    transfers = transfers[valid_mask]
-    
-    if len(walkability) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
+    ax.scatter(d['dist'], d['walk'], alpha=0.5, s=30, c='#2ecc71')
+    z = np.polyfit(d['dist'], d['walk'], 1)
+    xl = np.linspace(d['dist'].min(), d['dist'].max(), 100)
+    ax.plot(xl, np.poly1d(z)(xl), 'r--', alpha=0.8, label='Trend')
+    ax.set_xlabel('Walking distance to nearest transit stop (m)')
+    ax.set_ylabel('Walkability score (0–100)')
+    ax.set_title('2. Transit access vs Walkability — Closer to transit → higher walkability')
+    ax.legend()
+    ax.set_xlim(left=0)
+    plt.tight_layout()
+    return fig
+
+
+def _wm_walkability_vs_commute(df: pd.DataFrame) -> Optional[plt.Figure]:
+    """Graph 3: Walkability vs Commute time. Relationship between walkability and mobility."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    d = df[df['walkability_score'].notna() & df['total_commute_minutes'].notna()].copy()
+    d['walk'] = pd.to_numeric(d['walkability_score'], errors='coerce')
+    d['commute'] = pd.to_numeric(d['total_commute_minutes'], errors='coerce')
+    d = d[(d['commute'] > 0) & d['walk'].notna()].dropna(subset=['walk', 'commute'])
+    if len(d) < 5:
+        ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
         return fig
-    
-    ax.scatter(walkability, transfers, alpha=0.5, s=30, c='gold')
-    
-    z = np.polyfit(walkability, transfers, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(walkability.min(), walkability.max(), 100)
-    ax.plot(x_line, p(x_line), "r--", alpha=0.8, label='Trend line')
-    
-    ax.set_xlabel('Walkability Score')
-    ax.set_ylabel('Number of Transfers')
-    ax.set_title('RQ17: Relationship between Walkability and Transfer Count')
+    ax.scatter(d['walk'], d['commute'], alpha=0.5, s=30, c='#9b59b6')
+    z = np.polyfit(d['walk'], d['commute'], 1)
+    xl = np.linspace(d['walk'].min(), d['walk'].max(), 100)
+    ax.plot(xl, np.poly1d(z)(xl), 'r--', alpha=0.8, label='Trend')
+    ax.set_xlabel('Walkability score (0–100)')
+    ax.set_ylabel('Commute time (min)')
+    ax.set_title('3. Walkability vs Commute — How walkability relates to mobility (commute)')
     ax.legend()
     plt.tight_layout()
     return fig
 
 
-def _create_rq18_bar(rq18_results: Dict) -> plt.Figure:
-    """RQ18: Walkability-to-Affordability Ratio by District"""
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    top_5 = rq18_results.get('top_5_districts', [])
-    if not top_5:
+def _wm_bike_vs_walkability(df: pd.DataFrame) -> Optional[plt.Figure]:
+    """Graph 4: Bike accessibility vs Walkability. Better bike infra → higher walkability."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    d = df[df['bike_accessibility_score'].notna() & df['walkability_score'].notna()].copy()
+    d['bike'] = pd.to_numeric(d['bike_accessibility_score'], errors='coerce')
+    d['walk'] = pd.to_numeric(d['walkability_score'], errors='coerce')
+    d = d[(d['bike'] >= 0) & d['walk'].notna()].dropna(subset=['bike', 'walk'])
+    if len(d) < 5:
         ax.text(0.5, 0.5, 'No data available', ha='center', va='center', transform=ax.transAxes)
         return fig
-    
-    districts = [d['district'] for d in top_5]
-    ratios = [float(d.get('walkability_rent_ratio', 0)) for d in top_5]
-    
-    # Ensure ratios are valid numbers
-    ratios = np.array([r for r in ratios if not np.isnan(r) and r >= 0])
-    districts = [districts[i] for i in range(len(districts)) if i < len(ratios)]
-    
-    if len(ratios) == 0:
-        ax.text(0.5, 0.5, 'No valid data available', ha='center', va='center', transform=ax.transAxes)
-        return fig
-    
-    max_ratio = max(ratios) if len(ratios) > 0 else 1
-    colors = plt.cm.RdYlGn(ratios / max_ratio) if max_ratio > 0 else plt.cm.RdYlGn([0.5] * len(ratios))
-    ax.barh(districts, ratios, color=colors, alpha=0.7)
-    ax.set_xlabel('Walkability-to-Rent Ratio (Walkability Score per Euro)')
-    ax.set_title('RQ18: Top 5 Districts by Walkability-to-Affordability Ratio')
+    ax.scatter(d['bike'], d['walk'], alpha=0.5, s=30, c='#e67e22')
+    z = np.polyfit(d['bike'], d['walk'], 1)
+    xl = np.linspace(d['bike'].min(), d['bike'].max(), 100)
+    ax.plot(xl, np.poly1d(z)(xl), 'r--', alpha=0.8, label='Trend')
+    ax.set_xlabel('Bike accessibility score (0–100)')
+    ax.set_ylabel('Walkability score (0–100)')
+    ax.set_title('4. Bike vs Walkability — Better bike infra → higher walkability')
+    ax.legend()
+    plt.tight_layout()
+    return fig
+
+
+def _wm_district_walkability_commute(transport: pd.DataFrame) -> Optional[plt.Figure]:
+    """Graph 5: District-level Walkability vs Commute. Best districts = high walkability + short commute."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    d = transport[transport['avg_walkability_score'].notna() & transport['avg_commute_minutes'].notna()].copy()
+    d['walk'] = pd.to_numeric(d['avg_walkability_score'], errors='coerce')
+    d['commute'] = pd.to_numeric(d['avg_commute_minutes'], errors='coerce')
+    d = d.dropna(subset=['walk', 'commute'])
+    if len(d) < 3:
+        return None
+    ax.scatter(d['walk'], d['commute'], s=80, c='#1abc9c', alpha=0.8, edgecolors='#16a085')
+    for _, r in d.iterrows():
+        ax.annotate(r['district'][:12], (r['walk'], r['commute']), fontsize=8, alpha=0.9)
+    z = np.polyfit(d['walk'], d['commute'], 1)
+    xl = np.linspace(d['walk'].min(), d['walk'].max(), 50)
+    ax.plot(xl, np.poly1d(z)(xl), 'r--', alpha=0.8, label='Trend')
+    ax.set_xlabel('Avg walkability score')
+    ax.set_ylabel('Avg commute time (min)')
+    ax.set_title('5. District-level: Walkability vs Commute — Top-right = best of both')
+    ax.legend()
     plt.tight_layout()
     return fig

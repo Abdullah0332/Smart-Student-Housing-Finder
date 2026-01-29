@@ -9,7 +9,8 @@ from .maps import (
 )
 from .charts import (
     create_all_visualizations,
-    create_research_question_charts
+    create_research_question_charts,
+    create_five_walkability_mobility_charts
 )
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     'save_map',
     'get_map_html',
     'create_all_visualizations',
-    'create_research_question_charts'
+    'create_research_question_charts',
+    'create_five_walkability_mobility_charts'
 ]

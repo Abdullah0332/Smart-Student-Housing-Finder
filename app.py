@@ -14,6 +14,7 @@ from src.analysis import calculate_student_suitability_score, analyze_best_areas
 from src.analysis import RESEARCH_QUESTIONS, run_all_research_questions
 from src.visualization import create_interactive_map, get_map_html
 from src.visualization import create_all_visualizations, create_research_question_charts
+from src.visualization import create_five_walkability_mobility_charts
 
 from config.settings import (
     DEFAULT_ACCOMMODATION_FILE,
@@ -124,6 +125,14 @@ def main():
         st.warning("⚠️ Please select a university above")
         return
     
+    if not (st.session_state.analysis_complete and st.session_state.processed_df is not None):
+        st.markdown("---")
+        st.subheader("📋 Data preview (top 20 rows)")
+        render_pre_analysis_table(st.session_state.apartments_df)
+        st.markdown("---")
+        st.subheader("📊 Distinct Platforms (Table)")
+        render_platforms_table(st.session_state.apartments_df)
+    
     if run_analysis:
         run_full_analysis()
     
@@ -174,21 +183,25 @@ def render_data_loader():
     if file_exists:
         try:
             df_temp = pd.read_csv(default_file, sep=';', encoding='latin-1')
+            total_in_file = len(df_temp)
             if 'City' in df_temp.columns:
                 berlin_df = df_temp[df_temp['City'].str.contains('Berlin', case=False, na=False)]
-                total_records = len(berlin_df)
+                total_berlin = len(berlin_df)
             else:
-                total_records = len(df_temp)
-        except:
-            total_records = 0
-        
-        st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 3px 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center;">
-                <h3 style="margin: 0; color: #262730;">Total Records: {total_records:,}</h3>
-            </div>
-        """, unsafe_allow_html=True)
+                total_berlin = total_in_file
+        except Exception:
+            total_in_file = 0
+            total_berlin = 0
         
         load_default_data(default_file)
+        loaded = len(st.session_state.apartments_df) if st.session_state.apartments_df is not None else 0
+        
+        st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 8px 20px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center;">
+                <h3 style="margin: 0 0 4px 0; color: #262730;">Total in Records: {total_in_file:,}</h3>
+                <p style="margin: 0; font-size: 14px; color: #555;">Berlin: {total_berlin:,} · Loaded (after filters): {loaded:,}</p>
+            </div>
+        """, unsafe_allow_html=True)
     else:
         st.warning("No default file found.")
         uploaded_file = st.file_uploader(
@@ -339,7 +352,7 @@ def run_full_analysis():
     
     batch_get_walkability_info(
         df,
-        delay=1.0,  # Rate limiting for Overpass API
+        delay=1.0,
         progress_callback=update_walkability_progress
     )
     
@@ -389,6 +402,14 @@ def render_results():
     
     st.subheader("🗺️ Map View")
     render_map(df_paginated)
+    
+    st.markdown("---")
+    st.subheader("📋 Top 20 Rows (Table)")
+    render_top20_table(df_sorted)
+    
+    st.markdown("---")
+    st.subheader("📊 Distinct Platforms (Table)")
+    render_platforms_table(df_sorted)
     
     st.markdown("---")
     st.subheader("🏠 Rooms List")
@@ -481,6 +502,80 @@ def paginate_data(df: pd.DataFrame):
     return df_paginated, start_idx, end_idx, total_pages
 
 
+def render_pre_analysis_table(df: pd.DataFrame) -> None:
+    """Display top 20 rows with rent between 350 and 600, sorted by rent (ascending)."""
+    prefer = [
+        'address', 'rent', 'size_sqm', 'provider', 'apartment_type', 'room_category',
+        'City', 'city'
+    ]
+    cols = [c for c in prefer if c in df.columns]
+    if not cols:
+        cols = list(df.columns)[:10]
+    target = 20
+    if 'rent' not in df.columns:
+        tbl = df[cols].head(target).copy()
+        st.caption(f"Preview: top {len(tbl)} rows. No rent column. Total: {len(df)} rows. Run analysis for commute, walkability, etc.")
+    else:
+        rent_num = pd.to_numeric(df['rent'], errors='coerce')
+        mask = (rent_num >= 350) & (rent_num <= 1000)
+        if 'size_sqm' in df.columns:
+            size_num = pd.to_numeric(df['size_sqm'], errors='coerce')
+            mask = mask & (size_num <= 25)
+        filtered = df[mask].copy()
+        filtered = filtered.assign(_r=pd.to_numeric(filtered['rent'], errors='coerce')).sort_values('_r', ascending=True, na_position='last')
+        tbl = filtered[cols].head(target).copy()
+        n_in_range = len(filtered)
+        size_txt = ", size ≤ 25 m²" if 'size_sqm' in df.columns else ""
+        st.caption(f"Preview: top {len(tbl)} rows · rent €350–€600{size_txt}, sorted by rent. {n_in_range:,} in range. Total loaded: {len(df):,}.")
+    num = tbl.select_dtypes(include=['number']).columns
+    if len(num):
+        tbl[num] = tbl[num].round(2)
+    st.dataframe(tbl, use_container_width=True, hide_index=True)
+
+
+def render_top20_table(df: pd.DataFrame) -> None:
+    """Display top 20 rows of sorted data in a table."""
+    prefer = [
+        'address', 'rent', 'size_sqm', 'total_commute_minutes', 'nearest_stop_distance_m',
+        'walkability_score', 'suitability_score', 'total_pois_500m', 'bike_accessibility_score',
+        'provider', 'apartment_type', 'room_category'
+    ]
+    cols = [c for c in prefer if c in df.columns]
+    if not cols:
+        cols = list(df.columns)[:10]
+    tbl = df[cols].head(20).copy()
+    num = tbl.select_dtypes(include=['number']).columns
+    tbl[num] = tbl[num].round(2)
+    st.caption(f"Showing top 20 rows (respects current sort). Total: {len(df)} rows.")
+    st.dataframe(tbl, use_container_width=True, hide_index=True)
+
+
+def render_platforms_table(df: pd.DataFrame) -> None:
+    """Display a table of distinct platforms with room count and summary stats."""
+    if 'provider' not in df.columns or df['provider'].isna().all():
+        st.caption("No platform/provider column found.")
+        return
+    g = df.groupby('provider', dropna=False).size().reset_index(name='Rooms')
+    g = g.rename(columns={'provider': 'Platform'})
+    if 'rent' in df.columns:
+        r = df.groupby('provider', dropna=False)['rent'].mean().reset_index()
+        r = r.rename(columns={'provider': 'Platform', 'rent': 'Avg rent (€)'})
+        g = g.merge(r, on='Platform', how='left')
+    if 'total_commute_minutes' in df.columns:
+        c = df.groupby('provider', dropna=False)['total_commute_minutes'].mean().reset_index()
+        c = c.rename(columns={'provider': 'Platform', 'total_commute_minutes': 'Avg commute (min)'})
+        g = g.merge(c, on='Platform', how='left')
+    if 'walkability_score' in df.columns:
+        w = df.groupby('provider', dropna=False)['walkability_score'].mean().reset_index()
+        w = w.rename(columns={'provider': 'Platform', 'walkability_score': 'Avg walkability'})
+        g = g.merge(w, on='Platform', how='left')
+    num = g.select_dtypes(include=['number']).columns
+    g[num] = g[num].round(2)
+    g = g.sort_values('Rooms', ascending=False).reset_index(drop=True)
+    st.caption(f"Distinct platforms: {len(g)}. Total rooms: {int(g['Rooms'].sum())}.")
+    st.dataframe(g, use_container_width=True, hide_index=True)
+
+
 def render_map(df: pd.DataFrame):
     if 'latitude' not in df.columns or 'longitude' not in df.columns:
         st.error("⚠️ Missing coordinate columns!")
@@ -533,7 +628,6 @@ def render_room_cards(df: pd.DataFrame):
             rooms_html += build_room_card_html(idx, row, show_provider=True)
         rooms_html += '</div>'
         rooms_html += get_click_script()
-        # Wrap in complete HTML document for components.html
         full_html = f'<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>{rooms_html}</body></html>'
         components_html(full_html, height=600, scrolling=True)
         return
@@ -580,7 +674,6 @@ def render_room_cards(df: pd.DataFrame):
         rooms_html += '</div></div>'
     
     rooms_html += get_click_script()
-    # Wrap in complete HTML document for components.html
     from streamlit.components.v1 import html as components_html
     full_html = f'<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>{rooms_html}</body></html>'
     components_html(full_html, height=600, scrolling=True)
@@ -657,14 +750,12 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
     rent_val = row.get('rent')
     if pd.notna(rent_val) and float(rent_val) > 0:
         rent_formatted = f"{float(rent_val):.0f}"
-        # Use HTML entity for Euro symbol to avoid encoding issues
         card_html += f'<p style="margin: 8px 0 5px 0; font-size: 18px; font-weight: bold; color: #27ae60;">💰 &euro;{rent_formatted}/month</p>'
     else:
         card_html += '<p style="margin: 8px 0 5px 0; font-size: 14px; color: #999;">💰 Rent: N/A</p>'
     
     card_html += '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">'
     
-    # Commute Time Section
     card_html += '<div style="background: #f5f7fa; padding: 10px; border-radius: 5px; margin-top: 8px; margin-bottom: 10px;">'
     if pd.notna(row.get('total_commute_minutes')) and row['total_commute_minutes'] > 0:
         card_html += f'<p style="margin: 0; font-size: 16px; font-weight: bold; color: #2980b9; background: #e8f4f8; padding: 8px; border-radius: 4px; text-align: center;">⏱️ Commute Time: {row["total_commute_minutes"]:.1f} min</p>'
@@ -672,9 +763,6 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
         card_html += '<p style="margin: 0; font-size: 14px; color: #999; text-align: center;">⏱️ Commute Time: N/A</p>'
     card_html += '</div>'
     
-    # Walkability Score will be shown at the end
-    
-    # POIs Section
     card_html += '<div style="background: #ffffff; border: 1px solid #e0e0e0; padding: 10px; border-radius: 5px; margin-bottom: 10px;">'
     card_html += '<p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: #555;">📍 Nearby Amenities (500m):</p>'
     
@@ -698,7 +786,7 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
     
     if poi_items:
         card_html += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; font-size: 12px; color: #666;">'
-        for item in poi_items[:8]:  # Show max 8 items
+        for item in poi_items[:8]:
             card_html += f'<p style="margin: 2px 0;">{item}</p>'
         card_html += '</div>'
         
@@ -709,7 +797,6 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
     
     card_html += '</div>'
     
-    # Bike Accessibility Section
     bike_score = row.get('bike_accessibility_score')
     if pd.notna(bike_score) and bike_score is not None and bike_score > 0:
         bike_color = '#27ae60' if bike_score >= 50 else '#f39c12' if bike_score >= 30 else '#e74c3c'
@@ -733,7 +820,6 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
         
         card_html += '</div>'
     
-    # Nearest Amenities Section
     nearest_items = []
     if pd.notna(row.get('nearest_grocery_m')) and row['nearest_grocery_m'] is not None:
         nearest_items.append(f'🛒 Grocery: {int(row["nearest_grocery_m"])}m')
@@ -750,10 +836,8 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
             card_html += f'<p style="margin: 2px 0;">{item}</p>'
         card_html += '</div></div>'
     
-    # Scores at the end
     card_html += '<hr style="margin: 15px 0; border: none; border-top: 2px solid #e0e0e0;">'
     
-    # Walkability Score
     walkability_score = row.get('walkability_score')
     if pd.notna(walkability_score) and walkability_score is not None:
         score_color = '#27ae60' if walkability_score >= 70 else '#f39c12' if walkability_score >= 50 else '#e74c3c'
@@ -769,7 +853,6 @@ def build_room_card_html(idx, row, show_provider: bool = True) -> str:
         </div>
         '''
     
-    # Suitability Score
     suitability_score = row.get('suitability_score')
     if pd.notna(suitability_score) and suitability_score is not None:
         score_color = '#27ae60' if suitability_score >= 70 else '#f39c12' if suitability_score >= 50 else '#e74c3c'
@@ -939,7 +1022,6 @@ def render_area_analysis():
                         st.markdown("---")
                         st.subheader("📊 Research Questions Analysis")
                         
-                        # Original Research Questions
                         st.markdown("### Original Research Questions")
                         rq_col1, rq_col2 = st.columns(2)
                         with rq_col1:
@@ -953,41 +1035,69 @@ def render_area_analysis():
                             if 'rq5_bar' in rq_charts:
                                 st.pyplot(rq_charts['rq5_bar'])
                         
-                        # Walkability & Mobility Research Questions
-                        if any(key.startswith('rq6') or key.startswith('rq7') or key.startswith('rq8') or key.startswith('rq9') or key.startswith('rq10') for key in rq_charts.keys()):
-                            st.markdown("---")
-                            st.markdown("### Walkability & Mobility Research Questions")
-                            
-                            rq_walk_col1, rq_walk_col2 = st.columns(2)
-                            with rq_walk_col1:
-                                if 'rq6_scatter' in rq_charts:
-                                    st.pyplot(rq_charts['rq6_scatter'])
-                                if 'rq8_scatter' in rq_charts:
-                                    st.pyplot(rq_charts['rq8_scatter'])
-                                if 'rq10_bar' in rq_charts:
-                                    st.pyplot(rq_charts['rq10_bar'])
-                            with rq_walk_col2:
-                                if 'rq7_scatter' in rq_charts:
-                                    st.pyplot(rq_charts['rq7_scatter'])
-                                if 'rq9_scatter' in rq_charts:
-                                    st.pyplot(rq_charts['rq9_scatter'])
-                        
-                        # Display research question results
                         st.markdown("---")
-                        st.markdown("### Research Question Results")
+                        st.subheader("🚶🚴 Walkability & Mobility: 5 Key Graphs")
+                        st.markdown("""
+                        **Walkability** = how livable an area is on foot (POIs, transit access, bike infra).  
+                        **Mobility** = how easily you get around (transit, commute, bike).  
+                        They **overlap**: transit and bike are both mobility and feed into walkability.  
+                        **POI** (Points of Interest) = shops, cafes, gyms, etc. within 500 m — a major driver of walkability.
+                        """)
+                        st.markdown("#### What each graph shows")
+                        st.markdown("""
+                        **1. POI vs Walkability**  
+                        More nearby amenities (POIs) → typically **higher walkability**. The graph plots POI count within 500 m against the walkability score. Denser, more mixed-use areas score higher because daily needs (shops, cafes, gyms, etc.) are within walking distance.
+
+                        **2. Transit access vs Walkability**  
+                        **Closer** to the nearest stop → **higher** walkability. Transit accessibility is part of the walkability score. Shorter walking distance to U‑Bahn, S‑Bahn, or bus means better access and a higher score; points further right (longer distance) tend to have lower walkability.
+
+                        **3. Walkability vs Commute**  
+                        This graph links walkability to **mobility** (commute time). Often: more walkable ≈ better transit ↔ **shorter commute**. Walkable areas usually have good transit, so residents can reach campus or work quickly. The trend line shows how these two overlap.
+
+                        **4. Bike vs Walkability**  
+                        **Better bike infrastructure** → **higher** walkability. The bike contribution is built into the walkability score. More bike lanes, parking, and shared mobility nearby raise both bike accessibility and overall walkability.
+
+                        **5. District-level: Walkability vs Commute**  
+                        Each point is a **district**. **Top-right** = districts with both **high walkability** and **short commute** — the best of both. Bottom-left = lower walkability and longer commute. Use this to compare neighbourhoods and spot “sweet spots” for student housing.
+                        """)
+                        try:
+                            wm = create_five_walkability_mobility_charts(st.session_state.processed_df)
+                            if wm:
+                                wm1, wm2 = st.columns(2)
+                                with wm1:
+                                    if 'wm_1_poi_vs_walkability' in wm:
+                                        st.pyplot(wm['wm_1_poi_vs_walkability'])
+                                    if 'wm_3_walkability_vs_commute' in wm:
+                                        st.pyplot(wm['wm_3_walkability_vs_commute'])
+                                    if 'wm_5_district_walkability_commute' in wm:
+                                        st.pyplot(wm['wm_5_district_walkability_commute'])
+                                with wm2:
+                                    if 'wm_2_transit_vs_walkability' in wm:
+                                        st.pyplot(wm['wm_2_transit_vs_walkability'])
+                                    if 'wm_4_bike_vs_walkability' in wm:
+                                        st.pyplot(wm['wm_4_bike_vs_walkability'])
+                        except Exception as wm_err:
+                            st.warning(f"Could not generate Walkability–Mobility charts: {wm_err}")
                         
-                        for rq_key, rq_result in rq_results.items():
+                        st.markdown("---")
+                        st.markdown("### Research Question Results (RQ1–RQ5)")
+                        rq15_keys = ['RQ1_affordability_vs_accessibility', 'RQ2_district_balance', 'RQ3_walking_vs_availability',
+                                     'RQ4_platform_differences', 'RQ5_spatial_equity']
+                        for rq_key in rq15_keys:
+                            rq_result = rq_results.get(rq_key, {})
                             if rq_result.get('status') == 'success':
                                 with st.expander(f"📋 {rq_key.replace('_', ' ').title()}"):
                                     if 'interpretation' in rq_result:
                                         st.write(rq_result['interpretation'])
                                     if 'correlation_coefficient' in rq_result:
                                         st.metric("Correlation", f"{rq_result['correlation_coefficient']:.3f}")
-                                        st.metric("P-value", f"{rq_result['p_value']:.4f}")
+                                        if rq_result.get('p_value') is not None:
+                                            st.metric("P-value", f"{rq_result['p_value']:.4f}")
                                         st.metric("Significant", "Yes" if rq_result.get('statistically_significant') else "No")
                                     if 'r_squared' in rq_result:
                                         st.metric("R²", f"{rq_result['r_squared']:.3f}")
-                                        st.metric("P-value", f"{rq_result['p_value']:.4f}")
+                                        if rq_result.get('p_value') is not None:
+                                            st.metric("P-value", f"{rq_result['p_value']:.4f}")
                                     if 'top_5_districts' in rq_result:
                                         st.dataframe(pd.DataFrame(rq_result['top_5_districts']))
                                     if 'gini_coefficient' in rq_result:
